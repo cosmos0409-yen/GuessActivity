@@ -4,10 +4,11 @@ export interface ResultOverlayProps {
   kind: ResultKind;
   level: number;
   clearedLevels: number;
-  rewardLevel?: number;
   onContinue?: () => void;
   onWalkAway?: () => void;
   onNewGame?: () => void;
+  /** 結算畫面（gameOver/walkedAway/champion）可以直接查看排行榜 */
+  onOpenLeaderboard?: () => void;
 }
 
 const CONFETTI_COLORS = ["var(--tpi-green)", "var(--tpi-red)", "var(--tpi-navy)", "var(--tpi-gold)"];
@@ -36,10 +37,10 @@ export default function ResultOverlay({
   kind,
   level,
   clearedLevels,
-  rewardLevel,
   onContinue,
   onWalkAway,
   onNewGame,
+  onOpenLeaderboard,
 }: ResultOverlayProps) {
   if (kind === "levelCleared") {
     return (
@@ -77,31 +78,41 @@ export default function ResultOverlay({
         <p className="tpi-result__subtitle">五關全部過關，太厲害了！</p>
         <div className="tpi-result__actions">
           <button type="button" className="tpi-btn" onClick={onNewGame}>
-            再玩一場
+            開始新的一場
           </button>
+          {onOpenLeaderboard && (
+            <button type="button" className="tpi-btn tpi-btn--outline" onClick={onOpenLeaderboard}>
+              查看排行榜
+            </button>
+          )}
         </div>
       </div>
     );
   }
 
-  // gameOver / walkedAway
+  // gameOver / walkedAway：沒有保底關概念，答錯一律帶走「答錯之前已經通過的關數」的獎勵，只是不能再繼續挑戰。
   const isWalkedAway = kind === "walkedAway";
   return (
     <div className="tpi-result" role="alertdialog" aria-label={isWalkedAway ? "帶走獎勵" : "答錯"}>
       <h2 className={`tpi-result__title ${isWalkedAway ? "tpi-result__title--good" : "tpi-result__title--bad"}`}>
-        {isWalkedAway ? "🏅 順利帶走獎勵" : "💥 答案錯誤，挑戰結束"}
+        {isWalkedAway ? "🏅 順利帶走獎勵" : "💥 挑戰結束"}
       </h2>
       <p className="tpi-result__subtitle">
         {isWalkedAway
           ? `已通過 ${clearedLevels} 關，帶走獎勵離開。`
-          : rewardLevel && rewardLevel > 0
-            ? `已過保底關，帶走第 ${rewardLevel} 關的獎勵。`
-            : "很可惜，這次沒有獎勵，下次再來挑戰！"}
+          : clearedLevels > 0
+            ? `成功通過 ${clearedLevels} 關，獎勵帶走！`
+            : "很可惜，這次沒有通過任何關卡，下次再來挑戰！"}
       </p>
       <div className="tpi-result__actions">
         <button type="button" className="tpi-btn" onClick={onNewGame}>
           開始新的一場
         </button>
+        {onOpenLeaderboard && (
+          <button type="button" className="tpi-btn tpi-btn--outline" onClick={onOpenLeaderboard}>
+            查看排行榜
+          </button>
+        )}
       </div>
     </div>
   );

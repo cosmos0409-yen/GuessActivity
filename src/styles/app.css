@@ -165,13 +165,6 @@ button:disabled {
   color: #201a08;
 }
 
-.tpi-ladder__shield {
-  position: absolute;
-  top: -10px;
-  right: -8px;
-  font-size: clamp(14px, 1.6vw, 20px);
-}
-
 .tpi-ladder__connector {
   width: clamp(10px, 1.6vw, 24px);
   height: 3px;
@@ -269,6 +262,30 @@ button:disabled {
   font-size: 0.75em;
   font-weight: 400;
   opacity: 0.85;
+}
+
+.tpi-category-card__badge {
+  font-size: 0.7em;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff8e8;
+}
+
+.tpi-picker__notice {
+  text-align: center;
+  color: var(--tpi-red);
+  font-weight: 600;
+}
+
+.tpi-picker__override {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  color: #fff8e8;
 }
 
 /* ------------------------------------------------------------------ */

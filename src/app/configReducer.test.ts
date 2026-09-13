@@ -5,7 +5,7 @@ import { initialState, type GameConfig } from "../state/gameMachine";
 describe("appReducer —— SET_CONFIG 接到設定頁", () => {
   it("SET_CONFIG 會覆蓋 state.config，其他欄位不變", () => {
     const s0 = initialState();
-    const newConfig: GameConfig = { ...s0.config, seconds: 45, safeLevel: 2, timeoutPolicy: "host", rehearsal: true };
+    const newConfig: GameConfig = { ...s0.config, seconds: 45, timeoutPolicy: "host", rehearsal: true };
     const s1 = appReducer(s0, { type: "SET_CONFIG", config: newConfig });
     expect(s1.config).toEqual(newConfig);
     expect(s1.phase).toBe(s0.phase);
@@ -54,11 +54,10 @@ describe("appReducer —— SET_CONFIG 接到設定頁", () => {
     expect(s.records).toEqual([]);
   });
 
-  it("設定的每題秒數／保底關／時間到政策確實會反映在 state.config 上，供 App 讀取來驅動倒數與規則", () => {
+  it("設定的每題秒數／時間到政策確實會反映在 state.config 上，供 App 讀取來驅動倒數與規則", () => {
     let s = initialState();
-    s = appReducer(s, { type: "SET_CONFIG", config: { ...s.config, seconds: 45, safeLevel: 2, timeoutPolicy: "host" } });
+    s = appReducer(s, { type: "SET_CONFIG", config: { ...s.config, seconds: 45, timeoutPolicy: "host" } });
     expect(s.config.seconds).toBe(45);
-    expect(s.config.safeLevel).toBe(2);
     expect(s.config.timeoutPolicy).toBe("host");
   });
 });

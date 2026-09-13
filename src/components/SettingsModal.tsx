@@ -81,7 +81,6 @@ export default function SettingsModal({
   const [voteEnabled, setVoteEnabled] = useState(voteSettings.enabled);
 
   const [seconds, setSeconds] = useState(String(ruleSettings.seconds));
-  const [safeLevel, setSafeLevel] = useState(String(ruleSettings.safeLevel));
   const [timeoutPolicy, setTimeoutPolicy] = useState<TimeoutPolicy>(ruleSettings.timeoutPolicy);
   const [rehearsal, setRehearsal] = useState(ruleSettings.rehearsal);
 
@@ -124,10 +123,8 @@ export default function SettingsModal({
     onSaveVoteSettings({ ...voteSettings, formUrl, statsUrl, enabled: voteEnabled });
 
     const secondsNum = Number(seconds);
-    const safeLevelNum = Number(safeLevel);
     onSaveRuleSettings({
       seconds: Number.isFinite(secondsNum) && secondsNum > 0 ? Math.round(secondsNum) : ruleSettings.seconds,
-      safeLevel: Number.isFinite(safeLevelNum) && safeLevelNum > 0 ? Math.round(safeLevelNum) : ruleSettings.safeLevel,
       timeoutPolicy,
       rehearsal,
     });
@@ -201,10 +198,6 @@ export default function SettingsModal({
           <label>
             每題秒數
             <input type="number" min={5} value={seconds} onChange={(e) => setSeconds(e.target.value)} />
-          </label>
-          <label>
-            保底關
-            <input type="number" min={1} value={safeLevel} onChange={(e) => setSafeLevel(e.target.value)} />
           </label>
           <label>
             時間到的處理

@@ -1,10 +1,41 @@
 # 交接手冊 — 司法官學院 闖關猜謎 App
 
-> 最後更新：2026-09-12
-> 完整計畫：`C:\Users\user\.claude\plans\app-1-10-2-3-3-stateless-charm.md`（規則、美術、架構都以此為準）
+> 最後更新：2026-09-13
+> 完整計畫：`C:\Users\user\.claude\plans\app-1-10-2-3-3-stateless-charm.md`（規則、美術、架構都以此為準；2026-09-13 已在計畫檔裡標註保底關取消的異動）
 
 ## 一句話現況
-Phase 1–6 全部完成：資料層、狀態機、投票模組、主畫面 UI、提示卡、合成音效、快捷鍵、設定頁、彩排模式、排行榜、主持人手卡都已就位，測試共 **170 個全綠**，`npx tsc --noEmit` 0 錯誤。Phase 9（README.md／docs/題庫維護說明.md／CLAUDE.md）已完成。**下一步是 Phase 8 實測**：`npm run dev` 用真的瀏覽器走場，以及 `npm run build` 在 Node 24 會當掉的問題仍待處理（見已知問題）。
+Phase 1–6 全部完成：資料層、狀態機、投票模組、主畫面 UI、提示卡、合成音效、快捷鍵、設定頁、彩排模式、排行榜、主持人手卡都已就位。Phase 9（README.md／docs/題庫維護說明.md／CLAUDE.md）已完成。**2026-09-13：修好使用者實測回報的 4 個問題**（詳見下方「2026-09-13 修正紀錄」），測試從 170 增加到 **179 個全綠**，`npx tsc --noEmit` 0 錯誤，第 1 點（倒數不會動）已用真的瀏覽器驗證過。`npm run build` 在 Node 24 會當掉的問題仍待處理（見已知問題）。
+
+## 2026-09-13 修正紀錄（使用者實測回報的 4 個問題）
+
+1. **按「開始」後倒數不會真的開始計時**：根本原因是 `src/App.tsx` 的 `handleStart()` 只
+   `dispatch({type:"START"})`，從來沒有呼叫 `useCountdown` 回傳的 `mainCountdown.start()`，
+   所以 `CountdownClock` 的 `setInterval` 從來沒被啟動。修法：在 `handleStart()` 補上
+   `mainCountdown.start()`。新增回歸測試 `src/App.countdown.test.tsx`（渲染整個 `<App/>`，
+   用 `vi.useFakeTimers({toFake:[...,"performance"]})` 推進時間，驗證倒數數字真的遞減、
+   30 秒後真的觸發 TIMEOUT）；也用 Browser 工具在 `http://localhost:5173` 實測過。
+2. **答錯只能帶走已過關數，拿掉保底關**：`src/state/gameMachine.ts` 移除 `GameConfig.safeLevel`、
+   `GameState.safeLevelReached`、`GameRecord.rewardLevel`；答錯時 `clearedLevels` 本來就是
+   「答錯之前已經通過的關數」，直接沿用即可。同步移除 `LevelLadder` 的盾牌記號、
+   `SettingsModal` 的保底關輸入、`src/app/settings.ts` 的 `safeLevel` 欄位。
+   `ResultOverlay` 答錯文案改成「挑戰結束／成功通過 N 關，獎勵帶走！」。
+3. **「開始新的一場」回不去大廳**：`gameMachine.ts` 新增 `BACK_TO_LOBBY` action（只能從
+   `gameOver`/`walkedAway`/`champion` 觸發，轉場到 `lobby`）。`App.tsx` 的
+   `ResultOverlay` 的「開始新的一場」按鈕改成 dispatch `BACK_TO_LOBBY`（原本直接
+   `NEW_GAME` 沿用舊名字，現在會先回大廳讓主持人重新輸入名字）。上一場紀錄本來就在進到
+   結算畫面那一刻已經寫進 `state.records`，回大廳不會遺失。`ResultOverlay` 也加了「查看
+   排行榜」按鈕。
+4. **每個題型每場只能選一次**：`GameState` 新增 `pickedCategoriesThisGame: string[]`；
+   `PICK_CATEGORY` 多了可選的 `allowRepeatCategory` 欄位，選過的題型再選一次會被擋下
+   （state 不變），除非明確帶 `allowRepeatCategory:true`。`REPLACE_QUESTION`（換題）不會
+   動到這個清單。`CategoryPicker.tsx` 負責 UI：已選過的題型變灰並標「已選過」；如果本關
+   剩下沒選過的題型全部沒有題目，才會出現「允許重選已用過的題型」的核取方塊讓主持人略過限制。
+
+因為拿掉保底關而重寫／刪除的測試（都在 `src/state/gameMachine.test.ts`）：
+「答錯且已經過保底關 → gameOver 保底成就為 safeLevel」、「答錯且沒過保底關 → gameOver
+保底成就為 0」、「自訂設定：levels=2、safeLevel=1 時第 2 關答對即 champion」——改寫成不含
+`safeLevel`/`rewardLevel` 的等價測試；`src/app/records.test.ts`、`src/app/settings.test.ts`、
+`src/app/configReducer.test.ts` 的測試 fixture 也拿掉了 `safeLevel`/`rewardLevel` 欄位。
 
 ## 各階段狀態
 | 階段 | 狀態 | 產出 |
@@ -43,8 +74,8 @@ Phase 1–6 全部完成：資料層、狀態機、投票模組、主畫面 UI�
 - **`npm run build` 的 vite 打包階段會卡在「39 modules transformed」**，`tsc` 本身正常。音效 agent 推測是 Node v24.11.1 與 rollup 的相容性問題，但當時 UI agent 同時在跑 dev server 與建置，**也可能是多個程序同時動專案造成的**。下一個 session 先在沒有其他程序執行的情況下重跑一次；還是卡住的話，再試 Node 22 LTS。補充：音效 agent 的轉派對象查到錯誤碼是 `STATUS_STACK_BUFFER_OVERRUN`，發生在 `@rollup/rollup-win32-x64-msvc` 的 native binding；另外它用 dev server 驗證過 `/soundlab.html` 可以正常開啟（HTTP 200）。
 - 專案根目錄有除錯留下的暫存 log：`b2.log`–`b7.log`、`build_stdout.log`、`build_stderr.log`、`devserver.log`、`err.log`、`out.log`。**`.gitignore` 已經加了 `*.log`（2026-09-12）**，但這些既有檔案本身刻意沒有刪除，留給使用者自行處理。
 - Phase 6 已知限制：`src/hooks/useHotkeys.ts`（接 `window.addEventListener('keydown', ...)` 的部分）沒有自動化測試，因為這個環境不方便跑依賴 DOM 的 hook 測試（vitest 設定是 `environment: "node"`）；它的判斷邏輯已經抽成純函式 `computeHotkeyAction()`（`src/hooks/hotkeys.ts`），有 25 個測試涵蓋每個按鍵在允許/不允許狀態、輸入框忽略等情境，實際鍵盤事件建議在 Phase 8 用真的瀏覽器複測一次。
-- 設定頁改的「每題秒數／保底關／時間到政策／彩排模式」是透過 `src/app/configReducer.ts` 的本地 `SET_CONFIG` action 立即套用到 `state.config`（不需要重新整理頁面或開新的一場），因為 `gameMachine.ts`（禁止修改的檔案）本身沒有「更新設定」的 action。
+- 設定頁改的「每題秒數／時間到政策／彩排模式」是透過 `src/app/configReducer.ts` 的本地 `SET_CONFIG` action 立即套用到 `state.config`（不需要重新整理頁面或開新的一場）；2026-09-13 之前 `gameMachine.ts` 是禁止修改的檔案才需要這一層，這次修 4 個問題時已經取得允許改 `gameMachine.ts`，但 `SET_CONFIG` 這層轉接還是保留，沒有必要拆掉。
 - `LICENSES.md` 放在根目錄；依計畫應該放在 `public/sfx/LICENSES.md`，需要搬移。
 - `@types/qrcode` 被裝在 dependencies，應該搬到 devDependencies（不影響功能）。
 - 派工時要禁止 subagent 二度轉包（見記憶 no-subcontracting）。
-- 需要主辦單位提供：院徽向量檔與使用同意、題庫審閱、保底關的獎勵內容。
+- 需要主辦單位提供：院徽向量檔與使用同意、題庫審閱、各關的獎勵內容（沒有保底關概念了，答錯一律帶走已通過關數對應的獎勵）。

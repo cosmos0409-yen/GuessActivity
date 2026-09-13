@@ -45,9 +45,14 @@ function setupToAnswering(question = q("Q1", 1)): GameState {
   return s;
 }
 
-/** 走完一關：抽題 → 開始 → 選答 → 鎖定 → 揭曉 → 看詳解 → 下一步 */
+/**
+ * 走完一關：抽題 → 開始 → 選答 → 鎖定 → 揭曉 → 看詳解 → 下一步。
+ * 這裡固定帶 allowRepeatCategory:true，因為這個測試檔的 q() 預設固定回傳同一個
+ * categoryName（"測試題型"），這個 helper 本身是測「關卡流程」，不是測「題型只能選一次」
+ * （那個限制有專門的 describe 區塊），所以要略過限制才能連續走完多關。
+ */
 function clearLevel(state: GameState, question: Question, answer: Question["correct"] | string): GameState {
-  let s = reducer(state, { type: "PICK_CATEGORY", question });
+  let s = reducer(state, { type: "PICK_CATEGORY", question, allowRepeatCategory: true });
   s = reducer(s, { type: "START" });
   s = reducer(s, { type: "SELECT", option: answer as never });
   s = reducer(s, { type: "LOCK" });
@@ -64,7 +69,6 @@ describe("initialState", () => {
     expect(s.config).toEqual({
       levels: 5,
       seconds: 30,
-      safeLevel: 3,
       timeoutPolicy: "wrong",
       rehearsal: false,
       pollSeconds: 20,
@@ -155,26 +159,27 @@ describe("完整流程", () => {
     expect(s.records[0].contestantName).toBe("小明");
   });
 
-  it("答錯且已經過保底關 → gameOver 保底成就為 safeLevel", () => {
+  it("答錯：沒有保底關概念，紀錄「答錯之前已經通過的關數」，只是不能再繼續挑戰", () => {
     let s = setupNewGame("A同學");
     s = clearLevel(s, q("L1", 1), "A");
     s = reducer(s, { type: "CONTINUE" });
     s = clearLevel(s, q("L2", 2), "A");
     s = reducer(s, { type: "CONTINUE" });
-    s = clearLevel(s, q("L3", 3), "A"); // safeLevel = 3
-    expect(s.safeLevelReached).toBe(true);
+    s = clearLevel(s, q("L3", 3), "A");
     s = reducer(s, { type: "CONTINUE" });
     s = clearLevel(s, q("L4", 4), "B"); // 正解是 A，這裡答錯
     expect(s.phase).toBe("gameOver");
-    expect(s.records[0].rewardLevel).toBe(3);
+    expect(s.clearedLevels).toBe(3);
+    expect(s.records[0].clearedLevels).toBe(3);
+    expect(s.records[0]).not.toHaveProperty("rewardLevel");
   });
 
-  it("答錯且沒過保底關 → gameOver 保底成就為 0", () => {
+  it("第一關就答錯：已通過的關數為 0", () => {
     let s = setupNewGame("B同學");
     s = clearLevel(s, q("L1", 1), "B"); // 正解 A，答錯
     expect(s.phase).toBe("gameOver");
-    expect(s.safeLevelReached).toBe(false);
-    expect(s.records[0].rewardLevel).toBe(0);
+    expect(s.clearedLevels).toBe(0);
+    expect(s.records[0].clearedLevels).toBe(0);
   });
 
   it("WALK_AWAY 保留目前已通過的關數", () => {
@@ -186,17 +191,124 @@ describe("完整流程", () => {
     s = reducer(s, { type: "WALK_AWAY" });
     expect(s.phase).toBe("walkedAway");
     expect(s.records[0].result).toBe("walkedAway");
-    expect(s.records[0].rewardLevel).toBe(2);
+    expect(s.records[0].clearedLevels).toBe(2);
   });
 
-  it("自訂設定：levels=2、safeLevel=1 時第 2 關答對即 champion", () => {
-    let s = setupNewGame("D同學", { levels: 2, safeLevel: 1 });
+  it("自訂設定：levels=2 時第 2 關答對即 champion", () => {
+    let s = setupNewGame("D同學", { levels: 2 });
     s = clearLevel(s, q("C1", 1), "A");
-    expect(s.safeLevelReached).toBe(true);
     s = reducer(s, { type: "CONTINUE" });
     s = clearLevel(s, q("C2", 2), "A");
     expect(s.phase).toBe("champion");
     expect(s.records[0].clearedLevels).toBe(2);
+  });
+});
+
+describe("BACK_TO_LOBBY —— 結算畫面回到大廳", () => {
+  it("只有結算三個階段（gameOver/walkedAway/champion）可以 BACK_TO_LOBBY", () => {
+    const gameOver = clearLevel(setupNewGame("甲"), q("G1", 1), "B"); // 答錯 → gameOver
+    expect(gameOver.phase).toBe("gameOver");
+    expect(can(gameOver, "BACK_TO_LOBBY")).toBe(true);
+
+    let cleared = clearLevel(setupNewGame("乙"), q("G2", 1), "A");
+    expect(cleared.phase).toBe("levelCleared");
+    expect(can(cleared, "BACK_TO_LOBBY")).toBe(false);
+    const walked = reducer(cleared, { type: "WALK_AWAY" });
+    expect(walked.phase).toBe("walkedAway");
+    expect(can(walked, "BACK_TO_LOBBY")).toBe(true);
+
+    const lobby = setupNewGame("丙");
+    expect(can(lobby, "BACK_TO_LOBBY")).toBe(false);
+  });
+
+  it("BACK_TO_LOBBY 把 phase 設回 lobby，之後可以 NEW_GAME 重新輸入參賽者名字", () => {
+    let s = clearLevel(setupNewGame("測試員"), q("G3", 1), "B"); // gameOver
+    s = reducer(s, { type: "BACK_TO_LOBBY" });
+    expect(s.phase).toBe("lobby");
+    expect(can(s, "NEW_GAME")).toBe(true);
+    s = reducer(s, { type: "NEW_GAME", contestantName: "新參賽者" });
+    expect(s.phase).toBe("pickCategory");
+    expect(s.contestantName).toBe("新參賽者");
+  });
+
+  it("回到大廳前，上一場的紀錄已經寫進 records（非彩排模式）", () => {
+    let s = clearLevel(setupNewGame("記錄員"), q("G4", 1), "B");
+    expect(s.records).toHaveLength(1);
+    s = reducer(s, { type: "BACK_TO_LOBBY" });
+    expect(s.records).toHaveLength(1); // BACK_TO_LOBBY 不會遺失或重複寫入紀錄
+  });
+
+  it("在非結算階段呼叫 BACK_TO_LOBBY 不合法，回傳原 state", () => {
+    const s = setupToQuestionShown();
+    const result = reducer(s, { type: "BACK_TO_LOBBY" });
+    expect(result).toBe(s);
+  });
+});
+
+describe("題型每場只能選一次", () => {
+  it("同一題型再選一次會被擋下（state 不變），不能選到已經選過的題型", () => {
+    let s = setupNewGame("題型測試員");
+    s = reducer(s, { type: "PICK_CATEGORY", question: q("T1", 1, { categoryName: "法律小知識" }) });
+    expect(s.pickedCategoriesThisGame).toEqual(["法律小知識"]);
+    s = reducer(s, { type: "START" });
+    s = reducer(s, { type: "SELECT", option: "A" });
+    s = reducer(s, { type: "LOCK" });
+    s = reducer(s, { type: "REVEAL" });
+    s = reducer(s, { type: "SHOW_EXPLANATION" });
+    s = reducer(s, { type: "NEXT" });
+    s = reducer(s, { type: "CONTINUE" }); // -> pickCategory，第 2 關
+
+    const before = s;
+    const after = reducer(s, {
+      type: "PICK_CATEGORY",
+      question: q("T2", 2, { categoryName: "法律小知識" }),
+    });
+    expect(after).toBe(before);
+  });
+
+  it("allowRepeatCategory:true 可以明確略過限制，重選已經用過的題型", () => {
+    let s = setupNewGame("題型測試員2");
+    s = reducer(s, { type: "PICK_CATEGORY", question: q("T3", 1, { categoryName: "冷知識" }) });
+    s = reducer(s, { type: "START" });
+    s = reducer(s, { type: "SELECT", option: "A" });
+    s = reducer(s, { type: "LOCK" });
+    s = reducer(s, { type: "REVEAL" });
+    s = reducer(s, { type: "SHOW_EXPLANATION" });
+    s = reducer(s, { type: "NEXT" });
+    s = reducer(s, { type: "CONTINUE" });
+
+    s = reducer(s, {
+      type: "PICK_CATEGORY",
+      question: q("T4", 2, { categoryName: "冷知識" }),
+      allowRepeatCategory: true,
+    });
+    expect(s.phase).toBe("questionShown");
+    expect(s.question?.id).toBe("T4");
+    expect(s.pickedCategoriesThisGame).toEqual(["冷知識"]); // 不會重複疊加
+  });
+
+  it("REPLACE_QUESTION（換題）不算重新選題型，題型清單不受影響", () => {
+    let s = setupNewGame("換題測試員");
+    s = reducer(s, { type: "PICK_CATEGORY", question: q("R1", 1, { categoryName: "地方冷知識" }) });
+    expect(s.pickedCategoriesThisGame).toEqual(["地方冷知識"]);
+    s = reducer(s, { type: "REPLACE_QUESTION", question: q("R2", 1, { categoryName: "地方冷知識" }) });
+    expect(s.pickedCategoriesThisGame).toEqual(["地方冷知識"]);
+  });
+
+  it("NEW_GAME 開新的一場會重置已選過的題型清單", () => {
+    let s = setupNewGame("重置測試員");
+    s = reducer(s, { type: "PICK_CATEGORY", question: q("N1", 1, { categoryName: "法律小知識" }) });
+    expect(s.pickedCategoriesThisGame).toEqual(["法律小知識"]);
+    // 答錯直接到 gameOver（結算階段），才能合法呼叫 NEW_GAME
+    s = reducer(s, { type: "START" });
+    s = reducer(s, { type: "SELECT", option: "B" }); // 正解是 A，這裡答錯
+    s = reducer(s, { type: "LOCK" });
+    s = reducer(s, { type: "REVEAL" });
+    s = reducer(s, { type: "SHOW_EXPLANATION" });
+    s = reducer(s, { type: "NEXT" });
+    expect(s.phase).toBe("gameOver");
+    s = reducer(s, { type: "NEW_GAME", contestantName: "第二位" });
+    expect(s.pickedCategoriesThisGame).toEqual([]);
   });
 });
 

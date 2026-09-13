@@ -31,7 +31,6 @@ function record(overrides: Partial<GameRecord> = {}): GameRecord {
     lifelinesUsed: [],
     result: "champion",
     clearedLevels: 5,
-    rewardLevel: 5,
     timestamp: "2026-09-01T10:00:00.000Z",
     ...overrides,
   };

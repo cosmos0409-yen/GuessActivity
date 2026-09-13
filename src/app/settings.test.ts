@@ -31,8 +31,8 @@ describe("settings（規則設定）", () => {
   });
 
   it("存了設定之後讀回一樣的內容", () => {
-    saveRuleSettings({ seconds: 45, safeLevel: 2, timeoutPolicy: "host", rehearsal: true });
-    expect(loadRuleSettings()).toEqual({ seconds: 45, safeLevel: 2, timeoutPolicy: "host", rehearsal: true });
+    saveRuleSettings({ seconds: 45, timeoutPolicy: "host", rehearsal: true });
+    expect(loadRuleSettings()).toEqual({ seconds: 45, timeoutPolicy: "host", rehearsal: true });
   });
 
   it("localStorage 內容是損毀的 JSON 時，整個回退到預設值", () => {
@@ -50,7 +50,7 @@ describe("settings（規則設定）", () => {
   it("個別欄位型別不對時，只有那個欄位退回預設值，其他欄位保留", () => {
     localStorage.setItem(
       "quiz.settings.rules.v1",
-      JSON.stringify({ seconds: "很久", safeLevel: -1, timeoutPolicy: "隨便", rehearsal: "是" }),
+      JSON.stringify({ seconds: "很久", timeoutPolicy: "隨便", rehearsal: "是" }),
     );
     expect(loadRuleSettings()).toEqual(DEFAULT_RULE_SETTINGS);
   });

@@ -271,6 +271,10 @@ export default function App() {
 
   const usedIdsSet = useMemo(() => new Set(state.usedQuestionIds), [state.usedQuestionIds]);
   const availabilityMap = useMemo(() => (bank ? availability(bank, usedIdsSet) : {}), [bank, usedIdsSet]);
+  const pickedCategoriesSet = useMemo(
+    () => new Set(state.pickedCategoriesThisGame),
+    [state.pickedCategoriesThisGame],
+  );
 
   const handleUnlockAndEnter = () => {
     sfx.unlock();
@@ -284,7 +288,7 @@ export default function App() {
     dispatch({ type: "NEW_GAME", contestantName });
   };
 
-  const handlePickCategory = (categoryName: string) => {
+  const handlePickCategory = (categoryName: string, allowRepeatCategory: boolean) => {
     if (!bank) return;
     sfx.play("pickCategory");
     const question = drawQuestionForRound({
@@ -295,7 +299,7 @@ export default function App() {
       rehearsal: state.config.rehearsal,
     });
     if (question) {
-      dispatch({ type: "PICK_CATEGORY", question });
+      dispatch({ type: "PICK_CATEGORY", question, allowRepeatCategory });
       sfx.play("questionShow");
     }
   };
@@ -317,6 +321,7 @@ export default function App() {
 
   const handleStart = () => {
     dispatch({ type: "START" });
+    mainCountdown.start();
     sfx.startBed();
   };
 
@@ -386,10 +391,11 @@ export default function App() {
   const handleContinue = () => dispatch({ type: "CONTINUE" });
   const handleWalkAway = () => dispatch({ type: "WALK_AWAY" });
   const handleUndo = () => dispatch({ type: "UNDO" });
-  // 從結算畫面（gameOver/walkedAway/champion）開始新的一場：can() 只允許從這些 phase
-  // 直接 NEW_GAME（沿用剛才的參賽者名字），不允許 ENTER_LOBBY（那個 action 只能從 boot 觸發），
-  // 所以這裡不能呼叫 dispatch({ type: "ENTER_LOBBY" })，否則會被 reducer 忽略、卡在結算畫面出不去。
-  const handleNewGame = () => dispatch({ type: "NEW_GAME", contestantName: state.contestantName ?? "挑戰者" });
+  // 從結算畫面（gameOver/walkedAway/champion）按「開始新的一場」：回到大廳（lobby），
+  // 讓主持人可以重新輸入下一位參賽者的名字，再由 Lobby 的表單送出 NEW_GAME。
+  // 上一場的紀錄在進到結算畫面的那一刻（NEXT/WALK_AWAY 的 reducer）已經寫進 state.records，
+  // 不會因為回到大廳而遺失。
+  const handleBackToLobby = () => dispatch({ type: "BACK_TO_LOBBY" });
 
   // 換題要先跳出確認（滑鼠點擊「換題」按鈕與 R 快捷鍵都走這裡），避免不小心點掉一題。
   const handleReplaceQuestionWithConfirm = () => {
@@ -605,19 +611,15 @@ export default function App() {
   return (
     <main className="tpi-app">
       <Stage title={title} emblemSrc={EMBLEM_SRC}>
-        <LevelLadder
-          levels={state.config.levels}
-          currentLevel={state.level}
-          clearedLevels={state.clearedLevels}
-          safeLevel={state.config.safeLevel}
-        />
+        <LevelLadder levels={state.config.levels} currentLevel={state.level} clearedLevels={state.clearedLevels} />
 
         {state.phase === "pickCategory" && (
           <CategoryPicker
             categories={bank.categories}
             difficulty={state.level}
             availability={availabilityMap}
-            onPick={(category) => handlePickCategory(category.name)}
+            pickedCategories={pickedCategoriesSet}
+            onPick={(category, allowRepeat) => handlePickCategory(category.name, allowRepeat)}
           />
         )}
 
@@ -692,8 +694,8 @@ export default function App() {
           kind="gameOver"
           level={state.level}
           clearedLevels={state.clearedLevels}
-          rewardLevel={state.safeLevelReached ? state.config.safeLevel : 0}
-          onNewGame={handleNewGame}
+          onNewGame={handleBackToLobby}
+          onOpenLeaderboard={handleOpenLeaderboard}
         />
       )}
       {state.phase === "walkedAway" && (
@@ -701,7 +703,8 @@ export default function App() {
           kind="walkedAway"
           level={state.level}
           clearedLevels={state.clearedLevels}
-          onNewGame={handleNewGame}
+          onNewGame={handleBackToLobby}
+          onOpenLeaderboard={handleOpenLeaderboard}
         />
       )}
       {state.phase === "champion" && (
@@ -709,7 +712,8 @@ export default function App() {
           kind="champion"
           level={state.level}
           clearedLevels={state.clearedLevels}
-          onNewGame={handleNewGame}
+          onNewGame={handleBackToLobby}
+          onOpenLeaderboard={handleOpenLeaderboard}
         />
       )}
 

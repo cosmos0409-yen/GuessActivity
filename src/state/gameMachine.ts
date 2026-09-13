@@ -4,6 +4,9 @@
 //   boot → lobby → pickCategory → questionShown → counting
 //     → [lifeline] → answering → locked → revealed → explanation
 //     → levelCleared | gameOver | walkedAway | champion
+//   結算三個階段（gameOver／walkedAway／champion）可以 BACK_TO_LOBBY 回到 lobby，
+//   讓主持人重新輸入參賽者名字，再用 NEW_GAME 開新的一場（沒有保底關概念：
+//   答錯一律帶走「答錯之前已經通過的關數」clearedLevels，只是不能再繼續挑戰）。
 //
 // 設計原則：
 //   - reducer 對不合法的 action 一律回傳原 state（reference 相等），不 throw。
@@ -22,8 +25,6 @@ export interface GameConfig {
   levels: number;
   /** 每題倒數秒數，預設 30 */
   seconds: number;
-  /** 保底關，預設 3 */
-  safeLevel: number;
   /** 時間到的處理方式：'wrong' 直接判錯；'host' 交由主持人裁量（進入 answering 不計時）*/
   timeoutPolicy: "wrong" | "host";
   /** 彩排模式：不寫入已使用題目、不產生排行榜紀錄 */
@@ -35,7 +36,6 @@ export interface GameConfig {
 export const DEFAULT_CONFIG: GameConfig = {
   levels: 5,
   seconds: 30,
-  safeLevel: 3,
   timeoutPolicy: "wrong",
   rehearsal: false,
   pollSeconds: 20,
@@ -92,10 +92,11 @@ export interface GameRecord {
   levels: GameRecordLevel[];
   lifelinesUsed: LifelineKey[];
   result: GameResult;
-  /** 已通關的關數（champion 時等於 config.levels）*/
+  /**
+   * 已通關的關數：champion 時等於 config.levels；walkedAway/gameOver 時是
+   * 「答錯（或帶走）之前已經通過的關數」——沒有保底關概念，答錯一律帶走這個關數對應的獎勵。
+   */
   clearedLevels: number;
-  /** 保底成就：champion/walkedAway 為 clearedLevels；gameOver 時已過保底關為 safeLevel，否則 0 */
-  rewardLevel: number;
   timestamp: string;
 }
 
@@ -132,7 +133,8 @@ export interface GameState {
   /** 已完成關卡的作答紀錄（含本場目前為止的所有關）*/
   levelRecords: GameRecordLevel[];
   clearedLevels: number;
-  safeLevelReached: boolean;
+  /** 本場已經選過的題型名稱；同一題型每場只能選一次（見 PICK_CATEGORY） */
+  pickedCategoriesThisGame: string[];
 
   /** 給 SoundManager 用的最近一次非計時事件 */
   lastEvent?: string;
@@ -151,7 +153,8 @@ export interface GameState {
 export type GameAction =
   | { type: "ENTER_LOBBY" }
   | { type: "NEW_GAME"; contestantName: string }
-  | { type: "PICK_CATEGORY"; question: Question }
+  | { type: "PICK_CATEGORY"; question: Question; allowRepeatCategory?: boolean }
+  | { type: "BACK_TO_LOBBY" }
   | { type: "START" }
   | { type: "PAUSE" }
   | { type: "RESUME" }
@@ -176,6 +179,8 @@ const LIFELINE_KEYS: LifelineKey[] = ["fiftyRemove", "phoneFriend", "audiencePol
 const LIFELINE_USABLE_PHASES: Phase[] = ["questionShown", "counting", "answering"];
 const REPLACE_QUESTION_PHASES: Phase[] = ["questionShown", "counting", "lifeline", "answering", "locked"];
 const RESTART_GAME_PHASES: Phase[] = ["boot", "lobby", "gameOver", "champion", "walkedAway"];
+/** 結算畫面（答錯出局／帶走獎勵／全破），可以按「開始新的一場」回到大廳重新輸入參賽者名字 */
+const RESULT_PHASES: Phase[] = ["gameOver", "walkedAway", "champion"];
 
 // ---------------------------------------------------------------------------
 // initialState
@@ -193,7 +198,7 @@ export function initialState(config: Partial<GameConfig> = {}): GameState {
     usedQuestionIds: [],
     levelRecords: [],
     clearedLevels: 0,
-    safeLevelReached: false,
+    pickedCategoriesThisGame: [],
     records: [],
     history: [],
   };
@@ -212,6 +217,8 @@ export function can(state: GameState, actionType: GameAction["type"]): boolean {
       return RESTART_GAME_PHASES.includes(phase);
     case "PICK_CATEGORY":
       return phase === "pickCategory";
+    case "BACK_TO_LOBBY":
+      return RESULT_PHASES.includes(phase);
     case "START":
       return phase === "questionShown";
     case "PAUSE":
@@ -309,14 +316,26 @@ function transition(state: GameState, action: GameAction): GameState {
         pollStartedAt: undefined,
         levelRecords: [],
         clearedLevels: 0,
-        safeLevelReached: false,
+        pickedCategoriesThisGame: [],
         lastEvent: "new-game",
       };
 
+    case "BACK_TO_LOBBY":
+      return { ...state, phase: "lobby" };
+
     case "PICK_CATEGORY": {
+      const categoryName = action.question.categoryName;
+      const alreadyPicked = state.pickedCategoriesThisGame.includes(categoryName);
+      // 同一題型每場只能選一次；主持人可以在畫面上明確略過這個限制（allowRepeatCategory），
+      // 例如某一關剩下的新題型都已經沒有題目可抽時。
+      if (alreadyPicked && !action.allowRepeatCategory) return state;
+
       const usedQuestionIds = state.config.rehearsal
         ? state.usedQuestionIds
         : [...state.usedQuestionIds, action.question.id];
+      const pickedCategoriesThisGame = alreadyPicked
+        ? state.pickedCategoriesThisGame
+        : [...state.pickedCategoriesThisGame, categoryName];
       return {
         ...state,
         phase: "questionShown",
@@ -329,6 +348,7 @@ function transition(state: GameState, action: GameAction): GameState {
         pollResult: undefined,
         lifelineSub: undefined,
         usedQuestionIds,
+        pickedCategoriesThisGame,
         lastEvent: "question-shown",
       };
     }
@@ -430,17 +450,15 @@ function transition(state: GameState, action: GameAction): GameState {
 
       if (state.correct) {
         const clearedLevels = state.level;
-        const safeLevelReached = state.safeLevelReached || state.level >= state.config.safeLevel;
         const isLastLevel = state.level >= state.config.levels;
 
         if (isLastLevel) {
-          const record = buildGameRecord(state, levelRecords, "champion", clearedLevels);
+          const record = buildGameRecord(state, levelRecords, "champion");
           return {
             ...state,
             phase: "champion",
             levelRecords,
             clearedLevels,
-            safeLevelReached,
             records: state.config.rehearsal ? state.records : [...state.records, record],
             lastEvent: "champion",
           };
@@ -451,13 +469,13 @@ function transition(state: GameState, action: GameAction): GameState {
           phase: "levelCleared",
           levelRecords,
           clearedLevels,
-          safeLevelReached,
           lastEvent: "level-cleared",
         };
       }
 
-      const rewardLevel = state.safeLevelReached ? state.config.safeLevel : 0;
-      const record = buildGameRecord(state, levelRecords, "gameOver", rewardLevel);
+      // 答錯：沒有保底關概念，一律帶走「答錯之前已經通過的關數」（state.clearedLevels）的獎勵，
+      // 只是不能再繼續挑戰下一關。
+      const record = buildGameRecord(state, levelRecords, "gameOver");
       return {
         ...state,
         phase: "gameOver",
@@ -468,8 +486,7 @@ function transition(state: GameState, action: GameAction): GameState {
     }
 
     case "WALK_AWAY": {
-      const rewardLevel = state.clearedLevels;
-      const record = buildGameRecord(state, state.levelRecords, "walkedAway", rewardLevel);
+      const record = buildGameRecord(state, state.levelRecords, "walkedAway");
       return {
         ...state,
         phase: "walkedAway",
@@ -523,12 +540,7 @@ function transition(state: GameState, action: GameAction): GameState {
   }
 }
 
-function buildGameRecord(
-  state: GameState,
-  levelRecords: GameRecordLevel[],
-  result: GameResult,
-  rewardLevel: number,
-): GameRecord {
+function buildGameRecord(state: GameState, levelRecords: GameRecordLevel[], result: GameResult): GameRecord {
   const lifelinesUsed = LIFELINE_KEYS.filter((key) => !state.lifelines[key]);
   return {
     contestantName: state.contestantName ?? "",
@@ -536,7 +548,6 @@ function buildGameRecord(
     lifelinesUsed,
     result,
     clearedLevels: result === "champion" ? state.config.levels : state.clearedLevels,
-    rewardLevel,
     timestamp: new Date().toISOString(),
   };
 }
