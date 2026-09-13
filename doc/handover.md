@@ -37,6 +37,28 @@ Phase 1–6 全部完成：資料層、狀態機、投票模組、主畫面 UI�
 `safeLevel`/`rewardLevel` 的等價測試；`src/app/records.test.ts`、`src/app/settings.test.ts`、
 `src/app/configReducer.test.ts` 的測試 fixture 也拿掉了 `safeLevel`/`rewardLevel` 欄位。
 
+## 2026-09-13 第二輪試玩：待辦清單（使用者要求先 push 初版給夥伴看，以下尚未完成）
+
+主對話在 Chrome 1530×784 實際試玩後列出 9 個問題，使用者全部要求修正。commit `e11cf55` 完成了 7、8、9（已在 Chrome 確認）。**問題 1 還沒真正修好**：`e11cf55` 統一了題型名稱的 U+FE0F 正規化，agent 說在 Browser 工具（使用內建範例 CSV）裡能選到，但主對話在使用者的 Chrome（題庫讀的是 Google 試算表的 CSV，逐格比對與本機一致）驗收時，點「憲法法庭與實務」**仍然只有 focus 外框、進不了題目**（第 1 關與第 2 關都一樣，console 沒有錯誤，其他 9 個題型正常）。下一輪要在相同條件下重現：清掉 localStorage 的 `quiz.cache.*`，再填入試算表網址，或直接用 Chrome 測試；並檢查 `App.tsx` 選題型的 handler，例如 drawQuestion 回傳 null 時被靜默忽略、`can(PICK_CATEGORY)` 回傳 false 等。
+
+**以下 5 項還沒做**：
+
+- **2. 版面遮擋（最重要）**：LifelineDock 蓋住 B、D 選項；倒數圓環出現後，C、D 被推到 HostBar 底下，頁面需要捲動。目標：1920×1080、1536×864、1366×768、1280×720 下都不捲動、不重疊（建議改成 grid，提示卡放選項右側的獨立欄，倒數放在題目卡旁邊）。
+- **3.** 題目出現、還沒按開始時，倒數位置顯示「⏸ 不計時」，應該顯示完整秒數待命。
+- **4.** 時間到沒有「⏰ 時間到！」提示；答錯結算沒寫原因。`GameState.timedOut` 已經做好（commit `e11cf55`），只差 `ResultOverlay` 與 `App.tsx` 的顯示。
+- **5.** 過關、挑戰結束等遮罩太透明，背後的題目文字會透出來。
+- **6.** 遊戲中沒有顯示挑戰者名字。
+
+其他待辦：
+- **題庫擴充**：每個題型 × 難度目前只有 1 題（約 10 場就會用完）。使用者同意擴充到每格 3 題（再出 100 題）；出題 agent 為了節省額度已經被停止，沒有留下檔案。之後要重新派工（法律 L26–L75、知識 K28–K77），完成後合併進 `public/sample-questions.csv`，並貼進使用者的 Google 試算表（方法：在 localhost 分頁用 JS 把 TSV 寫進剪貼簿，再到試算表 Ctrl+V；**切換工作表分頁要用 JS 觸發或確認後再貼，曾經誤貼到錯的分頁**）。
+- 這一輪還沒測到：指定人幫幫忙、全場一起協助（線上投票已經接好）、帶走、全破畫面、設定頁、主持人手卡、`?` 說明浮層。
+
+## 2026-09-13 已接好的外部服務
+- **題庫試算表**「法官學院測驗表」已經發布成 CSV：`https://docs.google.com/spreadsheets/d/e/2PACX-1vQDMOTLgvahrEnSwzReVTj9CEbwKDgXjrAZ3Tu7h8mFLWTJlQr4gwfTOJjwLfSgFjbEhEeUxunp3viH/pub?gid=<gid>&single=true&output=csv`（題目 gid=0、題型 gid=471665721），逐格比對與本機 CSV 一致。
+- **投票**：Google 表單網址樣板 `https://docs.google.com/forms/d/e/1FAIpQLScUjDTJ21TW_2ogSH0dVQFlfGwkxIGlkhkyi6KIjIX2Pys6Ug/viewform?usp=pp_url&entry.529223632={round}`；Apps Script 統計網址 `https://script.google.com/macros/s/AKfycbzxhxHTLXZjA9p-f7nuHUC2LWsgFHXFxDES3BW1lviabGLD26aOJewQCG08DFIVDpRa/exec`（手機實測投 B，統計收到 1 票）。
+- 以上網址都存在使用者 Chrome 的 localStorage（`quiz.settings.*`、`quiz.vote.settings.v1`），換瀏覽器要重新到設定頁填入。
+- GitHub repo `cosmos0409-yen/GuessActivity` 已經改為 **public**（使用者同意題目答案公開）。
+
 ## 各階段狀態
 | 階段 | 狀態 | 產出 |
 |---|---|---|
