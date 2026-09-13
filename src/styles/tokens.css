@@ -1,0 +1,48 @@
+/*
+  院徽色系 design tokens。
+  綠底天平／紅底獨角獸／藍底六法全書／金色稻穗，取樣自司法官學院院徽。
+  以 1920×1080 投影為準的字級 token 也放在這裡，供後續 Phase 的 UI 元件使用。
+*/
+
+@import "@fontsource/noto-sans-tc/400.css";
+@import "@fontsource/noto-sans-tc/500.css";
+@import "@fontsource/noto-sans-tc/700.css";
+@import "@fontsource/noto-serif-tc/700.css";
+@import "@fontsource/noto-serif-tc/900.css";
+
+:root {
+  /* 院徽色系 */
+  --tpi-green: #057833;
+  --tpi-red: #e5161b;
+  --tpi-navy: #2e3284;
+  --tpi-gold: #c0a865;
+  --tpi-gold-deep: #907848;
+  --tpi-cream: #fff6e5;
+
+  /* 中性色（紙感、深色舞台背景用） */
+  --tpi-ink: #1c1a17;
+  --tpi-paper: #fffdf8;
+  --tpi-stage-bg-start: #14163a;
+  --tpi-stage-bg-end: #2e3284;
+
+  /* 圓角 */
+  --tpi-radius-lg: 32px;
+  --tpi-radius-md: 24px;
+  --tpi-radius-sm: 16px;
+
+  /* 陰影 */
+  --tpi-shadow-card: 0 12px 32px rgba(28, 26, 23, 0.18);
+  --tpi-shadow-raised: 0 4px 12px rgba(28, 26, 23, 0.12);
+  --tpi-shadow-glow-gold: 0 0 32px rgba(192, 168, 101, 0.55);
+
+  /* 字型 */
+  --tpi-font-heading: "Noto Serif TC", serif;
+  --tpi-font-body: "Noto Sans TC", sans-serif;
+
+  /* 1920×1080 投影字級（題目 ≥48px、選項 ≥36px、詳解 ≥32px） */
+  --tpi-font-size-question: 52px;
+  --tpi-font-size-option: 38px;
+  --tpi-font-size-explanation: 34px;
+  --tpi-font-size-heading: 64px;
+  --tpi-font-size-label: 28px;
+}

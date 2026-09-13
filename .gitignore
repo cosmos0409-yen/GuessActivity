@@ -1,0 +1,26 @@
+node_modules/
+dist/
+dist-ssr/
+*.local
+.DS_Store
+
+# editor
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# vite
+.vite/
+
+# 除錯用暫存 log（根目錄現有的 log 檔留給使用者自行處理，這裡只是不要再追蹤新產生的）
+*.log
+
+# 本機設定與遺留暫存檔
+.claude/
+*.new
