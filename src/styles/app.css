@@ -17,9 +17,18 @@ body {
   color: var(--tpi-ink);
 }
 
+:root {
+  /* 主持人操作列固定不換行、固定高度，讓需要「留白避開 HostBar」的覆蓋層
+     （例如詳解卡）可以用同一個數字對齊，不會因為視窗高度不同而算錯、蓋住按鈕。 */
+  --tpi-hostbar-h: clamp(52px, 7.5vh, 68px);
+}
+
 .tpi-app {
-  min-height: 100vh;
+  height: 100vh;
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 button {
@@ -37,7 +46,10 @@ button:disabled {
 
 .tpi-stage {
   position: relative;
-  min-height: 100vh;
+  /* 舞台是 .tpi-app（100vh flex column）裡剩下的空間，不能再自己撐到 100vh，
+     否則加上底下的 HostBar 高度就會超過視窗、整頁被迫捲動。 */
+  flex: 1;
+  min-height: 0;
   width: 100%;
   overflow: hidden;
   background: radial-gradient(ellipse at 50% -10%, #3a3f9e 0%, var(--tpi-stage-bg-start) 55%, #0c0d24 100%);
@@ -72,13 +84,17 @@ button:disabled {
   position: relative;
   z-index: 1;
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: clamp(12px, 1.8vw, 28px) clamp(16px, 2.6vw, 48px) calc(clamp(70px, 9vh, 110px));
-  gap: clamp(10px, 1.4vh, 20px);
+  overflow: hidden;
+  /* HostBar 現在是正常排版（不是 fixed），不用再自己保留底部空間去閃避它。 */
+  padding: clamp(10px, 1.6vh, 20px) clamp(16px, 2.6vw, 48px);
+  gap: clamp(8px, 1.2vh, 16px);
 }
 
 .tpi-stage__header {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: clamp(10px, 1.4vw, 20px);
@@ -111,6 +127,21 @@ button:disabled {
   opacity: 0.9;
 }
 
+.tpi-stage__contestant {
+  margin: 0 0 0 auto;
+  padding: 6px 16px;
+  border-radius: 999px;
+  background: rgba(192, 168, 101, 0.16);
+  border: 1px solid rgba(192, 168, 101, 0.5);
+  color: #fff8e8;
+  font-size: clamp(13px, 1.2vw, 17px);
+  white-space: nowrap;
+}
+
+.tpi-stage__contestant strong {
+  color: var(--tpi-gold);
+}
+
 /* reduced motion */
 @media (prefers-reduced-motion: reduce) {
   .tpi-stage__glow,
@@ -129,11 +160,12 @@ button:disabled {
 /* ------------------------------------------------------------------ */
 
 .tpi-ladder {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: clamp(6px, 1vw, 14px);
-  padding: clamp(6px, 1vh, 10px) 0;
+  padding: clamp(4px, 0.8vh, 10px) 0;
 }
 
 .tpi-ladder__step {
@@ -178,11 +210,13 @@ button:disabled {
 
 .tpi-picker {
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: clamp(10px, 1.6vh, 18px);
+  gap: clamp(8px, 1.4vh, 18px);
+  overflow-y: auto;
 }
 
 .tpi-picker__heading {
@@ -289,16 +323,52 @@ button:disabled {
 }
 
 /* ------------------------------------------------------------------ */
+/* Play：題目畫面主要排版（題目卡＋選項在左邊主欄，倒數＋提示卡在右邊窄欄）      */
+/* 用 grid 固定兩欄寬度，兩欄各自用 flex column 撐滿高度、min-height:0，       */
+/* 讓倒數圓環出現/消失不會把選項擠出畫面（見 2026-09-13 第二輪試玩問題 2）。   */
+/* ------------------------------------------------------------------ */
+
+.tpi-play {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr clamp(180px, 15vw, 230px);
+  gap: clamp(10px, 1.6vw, 24px);
+  align-items: stretch;
+}
+
+.tpi-play__main {
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(8px, 1.2vh, 16px);
+  overflow: hidden;
+}
+
+.tpi-play__side {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: clamp(8px, 1.4vh, 18px);
+  overflow: hidden;
+}
+
+/* ------------------------------------------------------------------ */
 /* QuestionCard                                                        */
 /* ------------------------------------------------------------------ */
 
 .tpi-question-card {
-  flex: 1;
+  flex: 1.1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: clamp(10px, 1.6vh, 18px);
+  gap: clamp(8px, 1.4vh, 16px);
+  overflow: hidden;
 }
 
 .tpi-question-card__inner {
@@ -307,13 +377,15 @@ button:disabled {
   border-radius: var(--tpi-radius-lg);
   box-shadow: var(--tpi-shadow-card);
   border: 4px solid var(--tpi-gold);
-  padding: clamp(20px, 3vh, 40px) clamp(24px, 4vw, 56px);
+  padding: clamp(14px, 2.4vh, 40px) clamp(24px, 4vw, 56px);
   max-width: 1400px;
   width: 100%;
+  max-height: 100%;
   text-align: center;
   display: flex;
   flex-direction: column;
-  gap: clamp(10px, 1.6vh, 18px);
+  gap: clamp(8px, 1.2vh, 18px);
+  overflow-y: auto;
 }
 
 .tpi-question-card__meta {
@@ -351,9 +423,10 @@ button:disabled {
 /* ------------------------------------------------------------------ */
 
 .tpi-options {
+  flex-shrink: 0;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: clamp(10px, 1.6vw, 22px);
+  gap: clamp(8px, 1.4vw, 22px);
   width: 100%;
   max-width: 1400px;
   margin: 0 auto;
@@ -371,7 +444,7 @@ button:disabled {
   font-weight: 700;
   color: #fff;
   text-align: left;
-  min-height: clamp(72px, 10vh, 110px);
+  min-height: clamp(50px, 9vh, 110px);
   box-shadow: var(--tpi-shadow-raised);
   transition: transform 0.12s ease, opacity 0.25s ease;
 }
@@ -558,28 +631,29 @@ button:disabled {
 /* ------------------------------------------------------------------ */
 
 .tpi-lifeline-dock {
-  position: fixed;
-  right: clamp(12px, 2vw, 28px);
-  bottom: clamp(78px, 10vh, 120px);
+  /* 改成排版裡的正常元素（右邊窄欄），不再用 fixed 疊在選項 B、D 上面
+     （見 2026-09-13 第二輪試玩問題 2）。 */
+  width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  z-index: 20;
+  gap: clamp(6px, 1vh, 10px);
+  min-height: 0;
+  overflow: hidden;
 }
 
 .tpi-lifeline-dock__card {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
-  width: clamp(150px, 15vw, 210px);
-  padding: 10px 14px;
+  gap: 8px;
+  width: 100%;
+  padding: clamp(6px, 1vh, 10px) 12px;
   border-radius: var(--tpi-radius-md);
   border: 3px solid var(--tpi-gold);
   background: linear-gradient(160deg, rgba(255, 246, 229, 0.96), rgba(255, 246, 229, 0.85));
   color: var(--tpi-ink);
   font-weight: 700;
-  font-size: clamp(12px, 1.05vw, 15px);
+  font-size: clamp(11px, 0.95vw, 15px);
   box-shadow: var(--tpi-shadow-raised);
   text-align: left;
 }
@@ -818,11 +892,15 @@ button:disabled {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: 0;
+  top: 0;
+  /* 用 --tpi-hostbar-h 精確保留 HostBar 的高度，詳解卡不會蓋住「下一步」按鈕
+     （見 2026-09-13 第二輪試玩問題 2）；HostBar 現在固定不換行，這個數字才會準。 */
+  bottom: var(--tpi-hostbar-h);
   z-index: 30;
   display: flex;
+  align-items: flex-end;
   justify-content: center;
-  padding: clamp(70px, 8vh, 110px) 16px 90px;
+  padding: 16px;
   animation: tpi-slide-up 0.4s ease;
   pointer-events: none;
 }
@@ -842,12 +920,14 @@ button:disabled {
   pointer-events: auto;
   max-width: 1300px;
   width: 100%;
+  max-height: 100%;
+  overflow-y: auto;
   background: var(--tpi-cream);
   color: var(--tpi-ink);
   border-radius: var(--tpi-radius-lg);
   border: 4px solid var(--tpi-navy);
   box-shadow: var(--tpi-shadow-card);
-  padding: clamp(18px, 2.6vh, 34px) clamp(24px, 3vw, 48px);
+  padding: clamp(14px, 2.2vh, 34px) clamp(24px, 3vw, 48px);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -880,6 +960,43 @@ button:disabled {
 }
 
 /* ------------------------------------------------------------------ */
+/* 時間到提示（倒數結束後先顯示 1.5 秒，再揭曉答案）                    */
+/* ------------------------------------------------------------------ */
+
+.tpi-timeup {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(12, 13, 36, 0.9);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  pointer-events: none;
+}
+
+.tpi-timeup__text {
+  font-family: var(--tpi-font-heading);
+  font-weight: 700;
+  font-size: clamp(32px, 6vw, 64px);
+  color: var(--tpi-red);
+  text-shadow: 0 0 24px rgba(229, 22, 27, 0.6);
+  animation: tpi-timeup-pulse 0.6s ease-in-out infinite alternate;
+}
+
+@keyframes tpi-timeup-pulse {
+  from {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  to {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* ResultOverlay                                                       */
 /* ------------------------------------------------------------------ */
 
@@ -894,8 +1011,25 @@ button:disabled {
   gap: 20px;
   text-align: center;
   padding: 20px;
-  background: rgba(12, 13, 36, 0.82);
+  /* 遮罩要幾乎不透明＋模糊背景，避免題目文字透出來（見 2026-09-13 第二輪試玩問題 5） */
+  background: rgba(8, 9, 28, 0.96);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   color: #fff8e8;
+}
+
+.tpi-result__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  max-width: 900px;
+  width: 100%;
+  padding: clamp(24px, 4vw, 48px);
+  border-radius: 24px;
+  background: rgba(20, 22, 56, 0.92);
+  border: 1px solid rgba(255, 248, 232, 0.15);
+  box-shadow: var(--tpi-shadow-raised);
 }
 
 .tpi-result__title {
@@ -970,31 +1104,37 @@ button:disabled {
 /* ------------------------------------------------------------------ */
 
 .tpi-hostbar {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 15;
+  /* 改成 .tpi-app（100vh flex column）裡正常排版的最後一列，高度固定不換行，
+     這樣上面的內容才能準確算出剩下多少高度可以用，不會互相蓋到
+     （見 2026-09-13 第二輪試玩問題 2）。 */
+  flex-shrink: 0;
+  min-height: var(--tpi-hostbar-h);
+  width: 100%;
   display: flex;
-  gap: 8px;
+  gap: clamp(4px, 0.6vw, 8px);
   align-items: center;
   justify-content: center;
-  flex-wrap: wrap;
-  padding: 8px clamp(12px, 2vw, 32px);
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding: 8px clamp(10px, 2vw, 32px);
   background: rgba(6, 7, 24, 0.86);
   border-top: 1px solid rgba(255, 255, 255, 0.12);
   backdrop-filter: blur(6px);
+  position: relative;
+  z-index: 15;
 }
 
 .tpi-hostbar__btn {
+  flex-shrink: 0;
+  white-space: nowrap;
   font-family: var(--tpi-font-body);
   font-weight: 700;
-  font-size: clamp(12px, 1vw, 15px);
+  font-size: clamp(11px, 0.95vw, 15px);
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.25);
   background: rgba(255, 255, 255, 0.08);
   color: #f5f2e6;
-  padding: 8px 16px;
+  padding: clamp(6px, 1vh, 8px) clamp(10px, 1.4vw, 16px);
 }
 
 .tpi-hostbar__btn:hover:not(:disabled) {

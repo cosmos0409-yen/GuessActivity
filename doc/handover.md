@@ -1,10 +1,83 @@
 # 交接手冊 — 司法官學院 闖關猜謎 App
 
-> 最後更新：2026-09-13
+> 最後更新：2026-09-13（第三輪修正）
 > 完整計畫：`C:\Users\user\.claude\plans\app-1-10-2-3-3-stateless-charm.md`（規則、美術、架構都以此為準；2026-09-13 已在計畫檔裡標註保底關取消的異動）
 
 ## 一句話現況
-Phase 1–6 全部完成：資料層、狀態機、投票模組、主畫面 UI、提示卡、合成音效、快捷鍵、設定頁、彩排模式、排行榜、主持人手卡都已就位。Phase 9（README.md／docs/題庫維護說明.md／CLAUDE.md）已完成。**2026-09-13：修好使用者實測回報的 4 個問題**（詳見下方「2026-09-13 修正紀錄」），測試從 170 增加到 **179 個全綠**，`npx tsc --noEmit` 0 錯誤，第 1 點（倒數不會動）已用真的瀏覽器驗證過。`npm run build` 在 Node 24 會當掉的問題仍待處理（見已知問題）。
+Phase 1–6 全部完成：資料層、狀態機、投票模組、主畫面 UI、提示卡、合成音效、快捷鍵、設定頁、彩排模式、排行榜、主持人手卡都已就位。Phase 9（README.md／docs/題庫維護說明.md／CLAUDE.md）已完成。**2026-09-13 第三輪：修好「第二輪試玩待辦清單」剩下的 6 個問題**（詳見下方「2026-09-13 第三輪修正紀錄」），測試從 191 增加到 **197 個全綠**，`npx tsc --noEmit` 0 錯誤，1366×768／1920×1080／1536×864／1280×720 都已用 Browser 工具實測量過版面不重疊、不捲動。`npm run build` 在 Node 24 會當掉的問題仍待處理（見已知問題，GitHub Pages 走 Actions 打包不受影響）。
+
+## 2026-09-13 第三輪修正紀錄（「第二輪試玩：待辦清單」全部處理完畢）
+
+1. **「憲法法庭與實務」點了沒反應（根本原因，不是 FE0F 問題）**：`e11cf55` 的 U+FE0F 正規化本身沒錯，但**真正的根本原因**在
+   `src/App.tsx` 算「剩餘題數」的 `usedIdsSet`（原本只用 `state.usedQuestionIds`，也就是「這一場遊戲」用過的題目），
+   完全沒把 `src/data/usedStore.ts` 的**跨場次**已用題目（localStorage `quiz.used.ids`）算進去。
+   於是 `CategoryPicker` 顯示「剩餘 1 題」等錯誤數字、按鈕沒被停用，但實際呼叫
+   `drawQuestionForRound()`（`src/app/gameFlow.ts`）抽題時會排除掉 `usedStore` 裡的已用題目而回傳 `null`；
+   `handlePickCategory` 原本在 `question` 是 `null` 時什麼都不做（沒有 dispatch），畫面上只看得到
+   按鈕的 focus 外框，完全沒有錯誤訊息 —— 這正是使用者在自己 Chrome 用 Google 試算表題庫實測時
+   看到的現象（用 Browser 工具重現：先用 JS 把 `quiz.used.ids` 設成含有該題型某難度的題目 id，
+   重新整理後那個題型就會顯示「剩餘 0 題」且停用，符合預期）。
+   修法：`src/App.tsx` 的 `usedIdsSet` 改成 `new Set([...state.usedQuestionIds, ...getUsedIds()])`；
+   另外把「靜默失敗」改成 fail loud：`handlePickCategory` 在 `drawQuestionForRound` 回傳 `null` 時，
+   會 `setPickCategoryError(...)` 在選題畫面上顯示「「OOO」目前沒有可以抽的題目了，請選別的題型。」
+   （沿用既有 `.tpi-poll__error` 樣式），離開選題畫面會自動清掉這個訊息。
+   新增回歸測試 `src/App.pickCategory.test.tsx`（3 個測試：跨場次已用題目要讓剩餘題數正確歸零、
+   沒用過的題型剩餘題數不受影響、`drawQuestionForRound` 回傳 null 時要顯示錯誤訊息而不是靜默失敗）。
+   也已經在 Browser 工具用**真的 Google 試算表 CSV**（清掉 `quiz.settings.*`／`quiz.cache.*`／
+   `quiz.used.ids` 後重新填入試算表網址）實測成功進入「憲法法庭與實務」的題目畫面。
+
+2. **版面遮擋（最重要的一項）**：根本原因是 `LifelineDock` 用 `position: fixed` 疊在畫面右下角
+   （蓋住選項 B、D），`HostBar` 也用 `position: fixed` 疊在畫面最下面、且允許 `flex-wrap: wrap`
+   （換行後高度不固定，`.tpi-stage__content` 用猜測的 padding-bottom 保留空間，常常不夠，
+   導致選項被推到 HostBar 底下、要捲頁）。
+   改法：把 `.tpi-app` 改成 `height:100vh` 的 flex column（`overflow:hidden`），`.tpi-stage`
+   改成 `flex:1; min-height:0`（原本是自己 `min-height:100vh`），`HostBar` 拿掉 `position:fixed`，
+   變成 flex column 裡正常排版的最後一列、`flex-wrap:nowrap`（固定高度、不會換行）。
+   題目畫面（`state.question && phase!=='pickCategory'`）改成 `.tpi-play`（CSS grid，
+   `grid-template-columns: 1fr clamp(180px,15vw,230px)`）：左欄 `.tpi-play__main` 放題目卡＋選項
+   （＋投票面板），右欄 `.tpi-play__side` 放倒數圓環（上）＋提示卡 `LifelineDock`（下，原本浮動的
+   fixed dock 現在是這欄裡的正常元素）。`ExplanationCard`（詳解卡）的遮罩改用
+   `bottom: var(--tpi-hostbar-h)`（新的 CSS 變數，等於 HostBar 的固定高度）精準保留 HostBar 的空間，
+   不再用猜的 padding。
+   已用 Browser 工具在 1920×1080、1536×864、1366×768、1280×720 四個尺寸下，分別在「按開始後」
+   「使用提示卡後」「詳解卡出現時」量測 4 個選項／提示卡／HostBar／倒數的 `getBoundingClientRect()`，
+   確認彼此不重疊、都在 viewport 內，且 `document.documentElement.scrollHeight === innerHeight`
+   （量測數字見這次對話紀錄，不重複貼在這裡）。改動的檔案：`src/App.tsx`（JSX 結構）、
+   `src/styles/app.css`（`.tpi-app`／`.tpi-stage`／`.tpi-stage__content`／新增 `.tpi-play*`／
+   `.tpi-lifeline-dock`／`.tpi-hostbar`／`.tpi-explanation`／`.tpi-picker`／`.tpi-options` 等區塊）。
+   沒有寫自動化測試（CSS/版面問題 jsdom 測不出來，只能真的瀏覽器量測；這點在原始指示裡也只要求
+   A、C、D 要有測試）。
+
+3. **倒數待命顯示「不計時」**：根本原因是 `CountdownRing` 的 `stopped` 算成
+   `state.phase !== "counting"`，題目剛出現（`questionShown`，還沒按開始）也被誤判成「不計時」。
+   修法：改成 `stopped={!["questionShown", "counting"].includes(state.phase)}`——「不計時」只在
+   `lifeline`／`answering`／`locked`（提示卡永久結束倒數之後）才顯示；`questionShown` 時
+   `remainingMs` 本來就等於 `totalMs`（`mainCountdown.reset()` 剛跑過），所以會自動顯示完整秒數待命。
+   新增回歸測試 `src/App.timeUp.test.tsx`（驗證選完題型、還沒按開始時沒有「不計時」文字、
+   倒數數字顯示滿秒數；按下開始後倒數會遞減）。
+
+4. **時間到沒有明顯提示、結算沒寫原因**：新增 `timeUpNotice` 狀態，`mainCountdown.onExpire` 觸發時
+   `setTimeUpNotice(true)`，1.5 秒後（`window.setTimeout`）自動關閉；畫面上顯示置中的
+   「⏰ 時間到！」（`.tpi-timeup`，深色遮罩＋backdrop-blur＋紅字脈動動畫），選新題目時會自動清掉。
+   `ResultOverlay` 新增 `timedOut` prop，`gameOver` 文案改成視 `state.timedOut` 顯示「時間到，
+   ……」或「答錯了，……」（`state.timedOut` 在 `NEXT` action 轉場到 `gameOver` 的當下還沒被重設，
+   所以可以直接拿來判斷「這次答錯是不是因為時間到」）。同一個 `src/App.timeUp.test.tsx` 也涵蓋了
+   「⏰ 時間到！」1.5 秒後消失、結算畫面文字含「時間到」的測試。
+
+5. **過關／挑戰結束／帶走／全破遮罩太透明**：`.tpi-result` 背景從 `rgba(12,13,36,0.82)` 改成
+   `rgba(8,9,28,0.96)` 加 `backdrop-filter: blur(6px)`；四種結果畫面的內容都包進新的
+   `.tpi-result__card`（`rgba(20,22,56,0.92)`、圓角、邊框、陰影），不再是文字直接疊在半透明遮罩上。
+   檔案：`src/components/ResultOverlay.tsx`、`src/styles/app.css`。沒有另外寫測試（純視覺樣式，
+   既有的過關／結算流程測試——`src/App.countdown.test.tsx`、`src/state/gameMachine.test.ts`——
+   已經覆蓋這幾個畫面會不會出現，樣式本身用 Browser 工具肉眼確認過）。
+
+6. **遊戲中沒有顯示挑戰者名字**：`Stage` 元件新增可選的 `contestantName` prop，顯示在標題列右側
+   （`.tpi-stage__contestant`，金色系膠囊樣式），`App.tsx` 傳入 `state.contestantName`
+   （`NEW_GAME` action 時就會存進 `GameState.contestantName`，原本就有這個欄位只是沒有用在畫面上）。
+   只在 Stage 有 children 時渲染（也就是遊戲進行中的畫面），大廳/開場畫面不受影響。
+
+沿用第二輪就有、這次仍然沒有動的部分：`docs/你需要做的事.md` 提到的題庫擴充仍未開始；
+`?` 說明浮層、主持人手卡、設定頁這次沒有重新測過（這次範圍限定在上面 6 項）。
 
 ## 2026-09-13 修正紀錄（使用者實測回報的 4 個問題）
 
@@ -37,19 +110,11 @@ Phase 1–6 全部完成：資料層、狀態機、投票模組、主畫面 UI�
 `safeLevel`/`rewardLevel` 的等價測試；`src/app/records.test.ts`、`src/app/settings.test.ts`、
 `src/app/configReducer.test.ts` 的測試 fixture 也拿掉了 `safeLevel`/`rewardLevel` 欄位。
 
-## 2026-09-13 第二輪試玩：待辦清單（使用者要求先 push 初版給夥伴看，以下尚未完成）
+## 2026-09-13 第二輪試玩：待辦清單（歷史紀錄，第三輪已全部修完，見上方「第三輪修正紀錄」）
 
-主對話在 Chrome 1530×784 實際試玩後列出 9 個問題，使用者全部要求修正。commit `e11cf55` 完成了 7、8、9（已在 Chrome 確認）。**問題 1 還沒真正修好**：`e11cf55` 統一了題型名稱的 U+FE0F 正規化，agent 說在 Browser 工具（使用內建範例 CSV）裡能選到，但主對話在使用者的 Chrome（題庫讀的是 Google 試算表的 CSV，逐格比對與本機一致）驗收時，點「憲法法庭與實務」**仍然只有 focus 外框、進不了題目**（第 1 關與第 2 關都一樣，console 沒有錯誤，其他 9 個題型正常）。下一輪要在相同條件下重現：清掉 localStorage 的 `quiz.cache.*`，再填入試算表網址，或直接用 Chrome 測試；並檢查 `App.tsx` 選題型的 handler，例如 drawQuestion 回傳 null 時被靜默忽略、`can(PICK_CATEGORY)` 回傳 false 等。
+主對話在 Chrome 1530×784 實際試玩後列出 9 個問題，使用者全部要求修正。commit `e11cf55` 完成了 7、8、9（已在 Chrome 確認）。問題 1（憲法法庭與實務點了沒反應）、2（版面遮擋）、3（不計時待命）、4（時間到提示／結算原因）、5（遮罩太透明）、6（沒顯示挑戰者名字）**已在 2026-09-13 第三輪全部修好**，根本原因與修法見本檔最上方「2026-09-13 第三輪修正紀錄」，不重複列在這裡。
 
-**以下 5 項還沒做**：
-
-- **2. 版面遮擋（最重要）**：LifelineDock 蓋住 B、D 選項；倒數圓環出現後，C、D 被推到 HostBar 底下，頁面需要捲動。目標：1920×1080、1536×864、1366×768、1280×720 下都不捲動、不重疊（建議改成 grid，提示卡放選項右側的獨立欄，倒數放在題目卡旁邊）。
-- **3.** 題目出現、還沒按開始時，倒數位置顯示「⏸ 不計時」，應該顯示完整秒數待命。
-- **4.** 時間到沒有「⏰ 時間到！」提示；答錯結算沒寫原因。`GameState.timedOut` 已經做好（commit `e11cf55`），只差 `ResultOverlay` 與 `App.tsx` 的顯示。
-- **5.** 過關、挑戰結束等遮罩太透明，背後的題目文字會透出來。
-- **6.** 遊戲中沒有顯示挑戰者名字。
-
-其他待辦：
+其他待辦（第三輪範圍之外，仍未處理）：
 - **題庫擴充**：每個題型 × 難度目前只有 1 題（約 10 場就會用完）。使用者同意擴充到每格 3 題（再出 100 題）；出題 agent 為了節省額度已經被停止，沒有留下檔案。之後要重新派工（法律 L26–L75、知識 K28–K77），完成後合併進 `public/sample-questions.csv`，並貼進使用者的 Google 試算表（方法：在 localhost 分頁用 JS 把 TSV 寫進剪貼簿，再到試算表 Ctrl+V；**切換工作表分頁要用 JS 觸發或確認後再貼，曾經誤貼到錯的分頁**）。
 - 這一輪還沒測到：指定人幫幫忙、全場一起協助（線上投票已經接好）、帶走、全破畫面、設定頁、主持人手卡、`?` 說明浮層。
 
@@ -75,7 +140,7 @@ Phase 1–6 全部完成：資料層、狀態機、投票模組、主畫面 UI�
 | Phase 9 README.md、CLAUDE.md | ✅ 2026-09-12 完成：新增 `README.md`、`docs/題庫維護說明.md`、`CLAUDE.md`；本檔案同步更新 | `README.md`、`docs/題庫維護說明.md`、`CLAUDE.md`、`doc/handover.md` |
 
 ## 下一個 session 的第一步
-1. `cd C:\猜謎程式`，先執行 `npx vitest run`，確認 170 個測試仍全部通過。
+1. `cd C:\猜謎程式`，先執行 `npx vitest run`，確認 197 個測試仍全部通過。
 2. 看 `docs/你需要做的事.md` 裡使用者這段時間的操作紀錄與回饋（美術、規則等意見），若有新指示先處理。
 3. 進行 **Phase 8 實測**：
    - 執行 `npm run dev`（**不要跑 `npm run build`**，會卡住，見下方已知問題），用 Browser 工具在 1920×1080 下實際走 3 場，檢查字級與對比（WCAG AA）。

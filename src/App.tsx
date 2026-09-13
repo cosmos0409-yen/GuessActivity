@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import "./styles/app.css";
 
 import { loadQuestionBank, setRemoteUrls } from "./data/questionSource";
-import { availability, normalizeCategoryName } from "./data/picker";
-import { resetUsed } from "./data/usedStore";
+import { availability, normalizeCategoryName, stripLeadingEmoji } from "./data/picker";
+import { getUsedIds, resetUsed } from "./data/usedStore";
 import type { QuestionBank } from "./data/types";
 import type { OptionKey } from "./data/types";
 
@@ -81,6 +81,8 @@ export default function App() {
   const [booted, setBooted] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
+  const [pickCategoryError, setPickCategoryError] = useState<string | null>(null);
+  const [timeUpNotice, setTimeUpNotice] = useState(false);
   const [voteSettings, setVoteSettings] = useState<VoteSettings>(() => loadVoteSettings());
   const [ruleSettings, setRuleSettings] = useState<RuleSettings>(() => loadRuleSettings());
   const [title, setTitle] = useState(() => loadTitle());
@@ -108,6 +110,11 @@ export default function App() {
       .catch((err) => setLoadError(err instanceof Error ? err.message : String(err)));
   }, []);
 
+  // 離開選題畫面（無論成功選到題目或直接跳關）就清掉上一次的錯誤提示，避免下一輪還殘留舊訊息。
+  useEffect(() => {
+    if (state.phase !== "pickCategory") setPickCategoryError(null);
+  }, [state.phase]);
+
   // ---------------------------------------------------------------------
   // 主倒數（30 秒）
   // ---------------------------------------------------------------------
@@ -129,6 +136,10 @@ export default function App() {
       sfx.stopBed();
       sfx.play("timeUp");
       dispatch({ type: "TIMEOUT" });
+      // 時間到要先給主持人／觀眾看到明顯的提示，1.5 秒後再讓答案（revealed 畫面）露出來，
+      // 不能倒數一結束就馬上無聲無息地跳去揭曉答案。
+      setTimeUpNotice(true);
+      window.setTimeout(() => setTimeUpNotice(false), 1500);
     },
   });
 
@@ -138,6 +149,7 @@ export default function App() {
       mainCountdown.reset(state.config.seconds);
       sfx.setBedUrgent(false);
       lastTickSecondRef.current = null;
+      setTimeUpNotice(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.question?.id, state.phase === "questionShown"]);
@@ -270,7 +282,13 @@ export default function App() {
   // 抽題 / 提示卡 / 主持人操作
   // ---------------------------------------------------------------------
 
-  const usedIdsSet = useMemo(() => new Set(state.usedQuestionIds), [state.usedQuestionIds]);
+  // 剩餘題數與可抽題判斷都要把「跨場次已使用題目」（localStorage）也算進去，
+  // 否則主控台會顯示「剩餘 1 題」等錯誤數字，但實際 drawQuestionForRound 會排除掉
+  // 已經用過的題目而回傳 null，導致點下去只有 focus 外框、沒有任何反應或提示。
+  const usedIdsSet = useMemo(
+    () => new Set([...state.usedQuestionIds, ...getUsedIds()]),
+    [state.usedQuestionIds],
+  );
   const availabilityMap = useMemo(() => (bank ? availability(bank, usedIdsSet) : {}), [bank, usedIdsSet]);
   const pickedCategoriesSet = useMemo(
     () => new Set(state.pickedCategoriesThisGame.map(normalizeCategoryName)),
@@ -291,7 +309,6 @@ export default function App() {
 
   const handlePickCategory = (categoryName: string, allowRepeatCategory: boolean) => {
     if (!bank) return;
-    sfx.play("pickCategory");
     const question = drawQuestionForRound({
       bank,
       category: categoryName,
@@ -300,8 +317,14 @@ export default function App() {
       rehearsal: state.config.rehearsal,
     });
     if (question) {
+      setPickCategoryError(null);
+      sfx.play("pickCategory");
       dispatch({ type: "PICK_CATEGORY", question, allowRepeatCategory });
       sfx.play("questionShow");
+    } else {
+      // 靜默失敗會讓主持人以為按鈕壞了（畫面上只看得到 focus 外框）：
+      // 這裡明確顯示原因，通常是「剩餘題數」的計算沒有把跨場次已用過的題目算進去。
+      setPickCategoryError(`「${stripLeadingEmoji(categoryName)}」目前沒有可以抽的題目了，請選別的題型。`);
     }
   };
 
@@ -611,73 +634,90 @@ export default function App() {
 
   return (
     <main className="tpi-app">
-      <Stage title={title} emblemSrc={EMBLEM_SRC}>
+      <Stage title={title} emblemSrc={EMBLEM_SRC} contestantName={state.contestantName}>
         <LevelLadder levels={state.config.levels} currentLevel={state.level} clearedLevels={state.clearedLevels} />
 
         {state.phase === "pickCategory" && (
-          <CategoryPicker
-            categories={bank.categories}
-            difficulty={state.level}
-            availability={availabilityMap}
-            pickedCategories={pickedCategoriesSet}
-            onPick={(category, allowRepeat) => handlePickCategory(category.name, allowRepeat)}
-          />
+          <>
+            {pickCategoryError && <p className="tpi-poll__error">{pickCategoryError}</p>}
+            <CategoryPicker
+              categories={bank.categories}
+              difficulty={state.level}
+              availability={availabilityMap}
+              pickedCategories={pickedCategoriesSet}
+              onPick={(category, allowRepeat) => handlePickCategory(category.name, allowRepeat)}
+            />
+          </>
         )}
 
         {state.question && state.phase !== "pickCategory" && (
-          <>
-            <QuestionCard question={state.question} level={state.level} />
-            {showCountdown && (
-              <CountdownRing
-                remainingMs={mainCountdown.remainingMs}
-                totalMs={state.config.seconds * 1000}
-                stopped={state.phase !== "counting"}
-              />
-            )}
-            {isPollActive && (
-              <AudiencePoll
-                qrDataUrl={qrDataUrl}
-                snapshot={pollSnapshot}
-                remainingSeconds={Math.ceil(pollCountdown.remainingMs / 1000)}
-                onFinishEarly={finishPoll}
-                manualMode={pollManualMode}
-                onToggleManual={handleToggleManual}
-                manualValues={pollManualValues}
-                onManualChange={handleManualChange}
-              />
-            )}
-            {pollErrorNotice && !isPollActive && (
-              <p className="tpi-poll__error">上一次線上投票連線異常，已自動切換為手動輸入。</p>
-            )}
-            {showOptionGrid && (
-              <OptionGrid
-                question={state.question}
-                selected={state.selected}
-                removedOption={state.removedOption}
-                locked={state.locked}
-                revealed={state.phase === "revealed" || state.phase === "explanation"}
-                correct={state.correct}
-                selectable={state.phase === "counting" || state.phase === "answering"}
-                onSelect={handleSelect}
-              />
-            )}
-          </>
+          // 題目 + 選項放左邊主欄，倒數與提示卡放右邊窄欄；用 CSS grid 讓兩欄各自佔滿高度，
+          // 不會因為倒數圓環出現／消失而把選項擠到 HostBar 底下（見 2026-09-13 第二輪試玩問題 2）。
+          <div className="tpi-play">
+            <div className="tpi-play__main">
+              <QuestionCard question={state.question} level={state.level} />
+              {isPollActive && (
+                <AudiencePoll
+                  qrDataUrl={qrDataUrl}
+                  snapshot={pollSnapshot}
+                  remainingSeconds={Math.ceil(pollCountdown.remainingMs / 1000)}
+                  onFinishEarly={finishPoll}
+                  manualMode={pollManualMode}
+                  onToggleManual={handleToggleManual}
+                  manualValues={pollManualValues}
+                  onManualChange={handleManualChange}
+                />
+              )}
+              {pollErrorNotice && !isPollActive && (
+                <p className="tpi-poll__error">上一次線上投票連線異常，已自動切換為手動輸入。</p>
+              )}
+              {showOptionGrid && (
+                <OptionGrid
+                  question={state.question}
+                  selected={state.selected}
+                  removedOption={state.removedOption}
+                  locked={state.locked}
+                  revealed={state.phase === "revealed" || state.phase === "explanation"}
+                  correct={state.correct}
+                  selectable={state.phase === "counting" || state.phase === "answering"}
+                  onSelect={handleSelect}
+                />
+              )}
+            </div>
+            <div className="tpi-play__side">
+              {showCountdown && (
+                <CountdownRing
+                  remainingMs={mainCountdown.remainingMs}
+                  totalMs={state.config.seconds * 1000}
+                  // 「不計時」只在提示卡永久結束倒數之後才顯示（lifeline／answering／locked）；
+                  // 題目剛出現、主持人還沒按「開始」的 questionShown 階段，要顯示完整秒數待命，
+                  // 不能一出題就先顯示「不計時」（見 2026-09-13 第二輪試玩問題 3）。
+                  stopped={!["questionShown", "counting"].includes(state.phase)}
+                />
+              )}
+              {showLifelineDock && (
+                <LifelineDock
+                  available={state.lifelines}
+                  usable={
+                    can(state, "USE_FIFTY_REMOVE") || can(state, "USE_PHONE_FRIEND") || can(state, "USE_AUDIENCE_POLL")
+                  }
+                  onUseFiftyRemove={handleUseFiftyRemove}
+                  onUsePhoneFriend={handleUsePhoneFriend}
+                  onUseAudiencePoll={handleUseAudiencePoll}
+                />
+              )}
+            </div>
+          </div>
         )}
       </Stage>
 
-      {showLifelineDock && (
-        <LifelineDock
-          available={state.lifelines}
-          usable={
-            can(state, "USE_FIFTY_REMOVE") || can(state, "USE_PHONE_FRIEND") || can(state, "USE_AUDIENCE_POLL")
-          }
-          onUseFiftyRemove={handleUseFiftyRemove}
-          onUsePhoneFriend={handleUsePhoneFriend}
-          onUseAudiencePoll={handleUseAudiencePoll}
-        />
-      )}
-
       {isPhoneOverlay && <PhoneAFriend onEnd={() => dispatch({ type: "END_LIFELINE" })} />}
+
+      {timeUpNotice && (
+        <div className="tpi-timeup" role="alert">
+          <span className="tpi-timeup__text">⏰ 時間到！</span>
+        </div>
+      )}
 
       {state.phase === "explanation" && state.question && <ExplanationCard question={state.question} />}
 
@@ -695,6 +735,7 @@ export default function App() {
           kind="gameOver"
           level={state.level}
           clearedLevels={state.clearedLevels}
+          timedOut={state.timedOut}
           onNewGame={handleBackToLobby}
           onOpenLeaderboard={handleOpenLeaderboard}
         />
