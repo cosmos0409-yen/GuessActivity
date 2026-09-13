@@ -287,6 +287,37 @@ describe("題型每場只能選一次", () => {
     expect(s.pickedCategoriesThisGame).toEqual(["冷知識"]); // 不會重複疊加
   });
 
+  it("題型名稱帶變體選擇符（如「⚖️」的 U+FE0F）時，第一次選擇要能成功進入題目（回歸測試：問題1）", () => {
+    // U+2696（天秤符號）+ U+FE0F（變體選擇符），CSV 裡常見的寫法，例如「⚖️ 憲法法庭與實務」。
+    const categoryWithVs16 = `${String.fromCodePoint(0x2696)}${String.fromCodePoint(0xfe0f)} 憲法法庭與實務`;
+    let s = setupNewGame("變體選擇符測試員");
+    s = reducer(s, { type: "PICK_CATEGORY", question: q("L06", 1, { categoryName: categoryWithVs16 }) });
+    expect(s.phase).toBe("questionShown");
+    expect(s.question?.id).toBe("L06");
+    expect(s.pickedCategoriesThisGame).toEqual([categoryWithVs16]);
+  });
+
+  it("同一題型只是變體選擇符寫法不同，仍視為選過同一個題型，第二次會被擋下", () => {
+    const withVs16 = `${String.fromCodePoint(0x2696)}${String.fromCodePoint(0xfe0f)} 憲法法庭與實務`;
+    const withoutVs16 = `${String.fromCodePoint(0x2696)} 憲法法庭與實務`;
+    let s = setupNewGame("變體選擇符測試員2");
+    s = reducer(s, { type: "PICK_CATEGORY", question: q("L06", 1, { categoryName: withVs16 }) });
+    s = reducer(s, { type: "START" });
+    s = reducer(s, { type: "SELECT", option: "A" });
+    s = reducer(s, { type: "LOCK" });
+    s = reducer(s, { type: "REVEAL" });
+    s = reducer(s, { type: "SHOW_EXPLANATION" });
+    s = reducer(s, { type: "NEXT" });
+    s = reducer(s, { type: "CONTINUE" }); // -> pickCategory，第 2 關
+
+    const before = s;
+    const after = reducer(s, {
+      type: "PICK_CATEGORY",
+      question: q("L07", 2, { categoryName: withoutVs16 }),
+    });
+    expect(after).toBe(before); // 沒有變體選擇符也要被判定成「已選過」，擋下來
+  });
+
   it("REPLACE_QUESTION（換題）不算重新選題型，題型清單不受影響", () => {
     let s = setupNewGame("換題測試員");
     s = reducer(s, { type: "PICK_CATEGORY", question: q("R1", 1, { categoryName: "地方冷知識" }) });
@@ -332,6 +363,42 @@ describe("timeoutPolicy", () => {
     const s = setupToQuestionShown();
     const result = reducer(s, { type: "TIMEOUT" });
     expect(result).toBe(s);
+  });
+
+  it("timedOut：'wrong' 政策時間到會標記 timedOut，讓結算畫面知道原因是時間到（回歸測試：問題4）", () => {
+    let s = setupToCounting();
+    expect(s.timedOut).toBe(false);
+    s = reducer(s, { type: "TIMEOUT" });
+    expect(s.timedOut).toBe(true);
+    // 一路走到 gameOver，timedOut 要一直保留，讓 ResultOverlay 顯示「時間到」
+    s = reducer(s, { type: "SHOW_EXPLANATION" });
+    s = reducer(s, { type: "NEXT" });
+    expect(s.phase).toBe("gameOver");
+    expect(s.timedOut).toBe(true);
+  });
+
+  it("timedOut：主動答錯（沒有時間到）不會標記 timedOut", () => {
+    let s = setupToCounting();
+    s = reducer(s, { type: "SELECT", option: "B" }); // q() 預設正解是 A
+    s = reducer(s, { type: "LOCK" });
+    s = reducer(s, { type: "REVEAL" });
+    expect(s.timedOut).toBe(false);
+    s = reducer(s, { type: "SHOW_EXPLANATION" });
+    s = reducer(s, { type: "NEXT" });
+    expect(s.phase).toBe("gameOver");
+    expect(s.timedOut).toBe(false);
+  });
+
+  it("timedOut：開新的一場會重設成 false", () => {
+    let s = setupToCounting();
+    s = reducer(s, { type: "TIMEOUT" });
+    expect(s.timedOut).toBe(true);
+    s = reducer(s, { type: "SHOW_EXPLANATION" });
+    s = reducer(s, { type: "NEXT" }); // -> gameOver，timedOut 仍是 true
+    s = reducer(s, { type: "BACK_TO_LOBBY" });
+    s = reducer(s, { type: "NEW_GAME", contestantName: "下一位" });
+    expect(s.phase).toBe("pickCategory");
+    expect(s.timedOut).toBe(false);
   });
 });
 

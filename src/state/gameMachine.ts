@@ -15,6 +15,7 @@
 //     這裡只管「現在允不允許倒數／有沒有永久停止倒數」這種階段轉換。
 
 import type { OptionKey, Question } from "../data/types";
+import { normalizeCategoryName } from "../data/picker";
 
 // ---------------------------------------------------------------------------
 // 設定
@@ -119,6 +120,12 @@ export interface GameState {
   correct?: boolean;
   /** 倒數是否暫停中（只有 phase==='counting' 時有意義）*/
   paused: boolean;
+  /**
+   * 這一題目前的 revealed／explanation／gameOver 是不是因為「時間到、系統自動判錯」
+   * （timeoutPolicy==='wrong' 時的 TIMEOUT）造成的；換題／下一關／新的一場都會重設成 false。
+   * 用來讓結算畫面（ResultOverlay）標示答錯原因是「時間到」還是「答錯了」。
+   */
+  timedOut: boolean;
 
   /** 每張提示卡是否還「可用」（true = 尚未用過） */
   lifelines: Record<LifelineKey, boolean>;
@@ -193,6 +200,7 @@ export function initialState(config: Partial<GameConfig> = {}): GameState {
     level: 0,
     locked: false,
     paused: false,
+    timedOut: false,
     lifelines: { fiftyRemove: true, phoneFriend: true, audiencePoll: true },
     lifelinesUsedThisLevel: [],
     usedQuestionIds: [],
@@ -309,6 +317,7 @@ function transition(state: GameState, action: GameAction): GameState {
         locked: false,
         paused: false,
         correct: undefined,
+        timedOut: false,
         lifelines: { fiftyRemove: true, phoneFriend: true, audiencePoll: true },
         lifelinesUsedThisLevel: [],
         lifelineSub: undefined,
@@ -325,7 +334,12 @@ function transition(state: GameState, action: GameAction): GameState {
 
     case "PICK_CATEGORY": {
       const categoryName = action.question.categoryName;
-      const alreadyPicked = state.pickedCategoriesThisGame.includes(categoryName);
+      // 用 normalizeCategoryName() 比對（去除前後空白與變體選擇符），
+      // 否則同一個題型只因為 emoji 呈現方式不同（例如「⚖️」有沒有 U+FE0F）
+      // 就會被誤判成沒選過，或反過來一直被誤判成選過。
+      const alreadyPicked = state.pickedCategoriesThisGame.some(
+        (name) => normalizeCategoryName(name) === normalizeCategoryName(categoryName),
+      );
       // 同一題型每場只能選一次；主持人可以在畫面上明確略過這個限制（allowRepeatCategory），
       // 例如某一關剩下的新題型都已經沒有題目可抽時。
       if (alreadyPicked && !action.allowRepeatCategory) return state;
@@ -345,6 +359,7 @@ function transition(state: GameState, action: GameAction): GameState {
         locked: false,
         paused: false,
         correct: undefined,
+        timedOut: false,
         pollResult: undefined,
         lifelineSub: undefined,
         usedQuestionIds,
@@ -373,9 +388,11 @@ function transition(state: GameState, action: GameAction): GameState {
           correct: false,
           selected: state.selected,
           paused: false,
+          timedOut: true,
           lastEvent: "reveal-wrong",
         };
       }
+      // "host" 政策：時間到交由主持人裁量，進入 answering 不自動判錯，所以不算「時間到判錯」。
       return { ...state, phase: "answering", paused: false, lastEvent: "timeout-host" };
     }
 
@@ -506,6 +523,7 @@ function transition(state: GameState, action: GameAction): GameState {
         locked: false,
         paused: false,
         correct: undefined,
+        timedOut: false,
         pollResult: undefined,
         lifelineSub: undefined,
         lifelinesUsedThisLevel: [],
@@ -520,6 +538,7 @@ function transition(state: GameState, action: GameAction): GameState {
         removedOption: undefined,
         locked: false,
         correct: undefined,
+        timedOut: false,
         pollResult: undefined,
         lifelineSub: undefined,
         paused: false,

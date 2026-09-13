@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import "./styles/app.css";
 
 import { loadQuestionBank, setRemoteUrls } from "./data/questionSource";
-import { availability } from "./data/picker";
+import { availability, normalizeCategoryName } from "./data/picker";
 import { resetUsed } from "./data/usedStore";
 import type { QuestionBank } from "./data/types";
 import type { OptionKey } from "./data/types";
@@ -272,7 +272,7 @@ export default function App() {
   const usedIdsSet = useMemo(() => new Set(state.usedQuestionIds), [state.usedQuestionIds]);
   const availabilityMap = useMemo(() => (bank ? availability(bank, usedIdsSet) : {}), [bank, usedIdsSet]);
   const pickedCategoriesSet = useMemo(
-    () => new Set(state.pickedCategoriesThisGame),
+    () => new Set(state.pickedCategoriesThisGame.map(normalizeCategoryName)),
     [state.pickedCategoriesThisGame],
   );
 

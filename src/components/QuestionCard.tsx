@@ -1,4 +1,5 @@
 import type { Question } from "../data/types";
+import { stripLeadingEmoji } from "../data/picker";
 
 export interface QuestionCardProps {
   question: Question;
@@ -12,7 +13,7 @@ export default function QuestionCard({ question, level }: QuestionCardProps) {
       <div className="tpi-question-card__inner">
         <div className="tpi-question-card__meta">
           <span>第 {level} 關</span>
-          <span>{question.categoryName}</span>
+          <span>{stripLeadingEmoji(question.categoryName)}</span>
           <span>難度 {question.difficulty}</span>
         </div>
         <p className="tpi-question-card__text">{question.text}</p>

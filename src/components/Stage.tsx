@@ -16,7 +16,7 @@ export default function Stage({ title, emblemSrc, children }: StageProps) {
           <img className="tpi-stage__emblem" src={emblemSrc} alt="司法官學院院徽" />
           <div>
             <h1 className="tpi-stage__title">{title}</h1>
-            <p className="tpi-stage__subtitle">JUDICIAL &amp; PROSECUTORIAL EXCELLENCE</p>
+            <p className="tpi-stage__subtitle">Academy for the Judiciary, Ministry of Justice</p>
           </div>
         </header>
         {children}

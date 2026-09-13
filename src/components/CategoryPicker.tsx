@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Category } from "../data/types";
-import type { AvailabilityMap } from "../data/picker";
+import { normalizeCategoryName, stripLeadingEmoji, type AvailabilityMap } from "../data/picker";
 
 export interface CategoryPickerProps {
   categories: Category[];
@@ -33,16 +33,19 @@ export default function CategoryPicker({
   const legal = enabledCategories.filter((c) => c.domain === "法律");
   const knowledge = enabledCategories.filter((c) => c.domain === "知識");
 
-  const countFor = (name: string): number => availability[name]?.[difficulty] ?? 0;
+  const countFor = (name: string): number => availability[normalizeCategoryName(name)]?.[difficulty] ?? 0;
+  // pickedCategories 裡的名稱也可能帶（或不帶）變體選擇符，一律正規化後再比對，
+  // 否則同一個題型會因為 emoji 呈現方式不同被誤判成「還沒選過」（見 normalizeCategoryName 註解）。
+  const isPicked = (name: string): boolean => pickedCategories.has(normalizeCategoryName(name));
 
-  const freshPickable = enabledCategories.filter((c) => !pickedCategories.has(c.name) && countFor(c.name) > 0);
-  const repeatPickable = enabledCategories.filter((c) => pickedCategories.has(c.name) && countFor(c.name) > 0);
+  const freshPickable = enabledCategories.filter((c) => !isPicked(c.name) && countFor(c.name) > 0);
+  const repeatPickable = enabledCategories.filter((c) => isPicked(c.name) && countFor(c.name) > 0);
   const anyPickable = freshPickable.length > 0 || repeatPickable.length > 0;
   const needsOverride = freshPickable.length === 0 && repeatPickable.length > 0;
 
   const renderCard = (category: Category) => {
     const count = countFor(category.name);
-    const alreadyPicked = pickedCategories.has(category.name);
+    const alreadyPicked = isPicked(category.name);
     const isDisabled = Boolean(disabled) || count <= 0 || (alreadyPicked && !allowRepeat);
     return (
       <button
@@ -52,12 +55,12 @@ export default function CategoryPicker({
         style={{ borderColor: isDisabled ? undefined : category.color }}
         disabled={isDisabled}
         onClick={() => onPick(category, alreadyPicked && allowRepeat)}
-        aria-label={`${category.name}，難度 ${difficulty}，剩餘 ${count} 題${alreadyPicked ? "，已選過" : ""}${isDisabled ? "（已停用）" : ""}`}
+        aria-label={`${stripLeadingEmoji(category.name)}，難度 ${difficulty}，剩餘 ${count} 題${alreadyPicked ? "，已選過" : ""}${isDisabled ? "（已停用）" : ""}`}
       >
         <span className="tpi-category-card__emoji" aria-hidden="true">
           {category.icon}
         </span>
-        <span>{category.name}</span>
+        <span>{stripLeadingEmoji(category.name)}</span>
         <span className="tpi-category-card__count">剩餘 {count} 題</span>
         {alreadyPicked && <span className="tpi-category-card__badge">已選過</span>}
       </button>

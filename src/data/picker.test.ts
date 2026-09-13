@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parseCategoriesCsv, parseQuestionsCsv } from "./questionSource";
-import { availability, drawQuestion, pickRemovableOption } from "./picker";
-import type { QuestionBank } from "./types";
+import { availability, drawQuestion, normalizeCategoryName, pickRemovableOption, stripLeadingEmoji } from "./picker";
+import type { Question, QuestionBank } from "./types";
 
 function readFixture(name: string): string {
   const url = new URL(`./__fixtures__/${name}`, import.meta.url);
@@ -21,6 +21,55 @@ function buildBank(): QuestionBank {
     warnings: [],
   };
 }
+
+// U+FE0F：emoji 變體選擇符，例如「⚖️」實際上是 U+2696（天秤符號）+ U+FE0F 兩個碼位組成。
+// 用 String.fromCodePoint 明確組字，避免依賴編輯器/檔案編碼是否保留看不見的變體選擇符。
+const SCALES = String.fromCodePoint(0x2696); // ⚖（不含變體選擇符）
+const VS16 = String.fromCodePoint(0xfe0f); // 變體選擇符本身
+const SCALES_EMOJI = SCALES + VS16; // ⚖️（含變體選擇符，CSV 裡常見的寫法）
+const CATEGORY_WITH_VS16 = `${SCALES_EMOJI} 憲法法庭與實務`;
+const CATEGORY_WITHOUT_VS16 = `${SCALES} 憲法法庭與實務`;
+
+function makeQuestion(overrides: Partial<Question> = {}): Question {
+  return {
+    id: "q1",
+    categoryName: CATEGORY_WITH_VS16,
+    domain: "法律",
+    difficulty: 1,
+    text: "題目",
+    options: { A: "A", B: "B", C: "C", D: "D" },
+    correct: "A",
+    explanation: "詳解",
+    status: "上架",
+    ...overrides,
+  };
+}
+
+describe("normalizeCategoryName", () => {
+  it("去除前後空白", () => {
+    expect(normalizeCategoryName("  憲法法庭與實務  ")).toBe("憲法法庭與實務");
+  });
+
+  it("去除 U+FE0F 變體選擇符，讓帶emoji變體符號與不帶的名稱視為同一個題型", () => {
+    expect(normalizeCategoryName(CATEGORY_WITH_VS16)).toBe(CATEGORY_WITHOUT_VS16);
+    expect(normalizeCategoryName(CATEGORY_WITHOUT_VS16)).toBe(CATEGORY_WITHOUT_VS16);
+  });
+});
+
+describe("stripLeadingEmoji", () => {
+  it("去掉開頭的 emoji 與後面的空白，只用於顯示", () => {
+    expect(stripLeadingEmoji("📕 法條冷門角落")).toBe("法條冷門角落");
+    expect(stripLeadingEmoji(CATEGORY_WITH_VS16)).toBe("憲法法庭與實務");
+  });
+
+  it("名稱沒有開頭 emoji 時原樣傳回", () => {
+    expect(stripLeadingEmoji("法條冷門角落")).toBe("法條冷門角落");
+  });
+
+  it("名稱整個都是 emoji（沒有文字）時，安全回傳原字串，不會變成空白", () => {
+    expect(stripLeadingEmoji("📕")).toBe("📕");
+  });
+});
 
 describe("drawQuestion", () => {
   it("待審題不會被抽到", () => {
@@ -67,6 +116,24 @@ describe("drawQuestion", () => {
       expect(q!.difficulty).toBe(1);
     }
   });
+
+  it("題型名稱帶變體選擇符（例如「⚖️」）時，用不帶變體選擇符的名稱查詢也能抽到題（回歸測試：問題1）", () => {
+    const bank: QuestionBank = {
+      questions: [makeQuestion({ id: "L06", categoryName: CATEGORY_WITH_VS16 })],
+      categories: [{ name: CATEGORY_WITH_VS16, domain: "法律", icon: "⚖️", color: "#E5161B", enabled: true }],
+      source: "bundled",
+      fetchedAt: new Date().toISOString(),
+      warnings: [],
+    };
+
+    // 題目的 categoryName 帶 U+FE0F，用完全一致的名稱查詢要能抽到
+    const withSelector = drawQuestion(bank, { category: CATEGORY_WITH_VS16, difficulty: 1, usedIds: [] });
+    expect(withSelector?.id).toBe("L06");
+
+    // 用不帶 U+FE0F 的名稱去查也要能抽到同一題，不能因為變體選擇符有無不同而找不到
+    const withoutSelector = drawQuestion(bank, { category: CATEGORY_WITHOUT_VS16, difficulty: 1, usedIds: [] });
+    expect(withoutSelector?.id).toBe("L06");
+  });
 });
 
 describe("availability", () => {
@@ -87,6 +154,20 @@ describe("availability", () => {
     const bank = buildBank();
     const stats = availability(bank, ["q1"]);
     expect(stats["法條冷門角落"][1]).toBe(1);
+  });
+
+  it("題型名稱帶變體選擇符時，計數要用正規化後的名稱查得到（回歸測試：問題1）", () => {
+    const bank: QuestionBank = {
+      questions: [makeQuestion({ id: "L06", categoryName: CATEGORY_WITH_VS16 })],
+      categories: [{ name: CATEGORY_WITH_VS16, domain: "法律", icon: "⚖️", color: "#E5161B", enabled: true }],
+      source: "bundled",
+      fetchedAt: new Date().toISOString(),
+      warnings: [],
+    };
+    const stats = availability(bank, []);
+    // 不管用帶不帶變體選擇符的名稱去正規化查詢，結果都要是同一個 key
+    expect(stats[normalizeCategoryName(CATEGORY_WITH_VS16)][1]).toBe(1);
+    expect(stats[normalizeCategoryName(CATEGORY_WITHOUT_VS16)][1]).toBe(1);
   });
 });
 
