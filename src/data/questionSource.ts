@@ -9,6 +9,7 @@
 //      回傳來源標記 "bundled"
 
 import { parseCsvRecords } from "./csv";
+import { assetUrl } from "../utils/baseUrl";
 import type {
   BankSource,
   Category,
@@ -30,8 +31,8 @@ export const STORAGE_KEYS = {
   cachedFetchedAt: "quiz.cache.fetchedAt",
 } as const;
 
-const BUNDLED_QUESTIONS_URL = "/sample-questions.csv";
-const BUNDLED_CATEGORIES_URL = "/sample-categories.csv";
+const BUNDLED_QUESTIONS_URL = assetUrl("sample-questions.csv");
+const BUNDLED_CATEGORIES_URL = assetUrl("sample-categories.csv");
 
 const VALID_DOMAINS: Domain[] = ["法律", "知識"];
 const VALID_OPTION_KEYS: OptionKey[] = ["A", "B", "C", "D"];

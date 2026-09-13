@@ -45,8 +45,9 @@ import Lobby from "./components/Lobby";
 import SettingsModal from "./components/SettingsModal";
 import Leaderboard from "./components/Leaderboard";
 import HotkeyHelpOverlay from "./components/HotkeyHelpOverlay";
+import { assetUrl } from "./utils/baseUrl";
 
-const EMBLEM_SRC = "/brand/emblem.jpg";
+const EMBLEM_SRC = assetUrl("brand/emblem.jpg");
 const TITLE_KEY = "quiz.settings.title";
 const DEFAULT_TITLE = "司法官學院 闖關大挑戰";
 
@@ -438,7 +439,7 @@ export default function App() {
   };
 
   const handleOpenHostCards = () => {
-    window.open("/hostcards.html", "_blank", "noopener");
+    window.open(assetUrl("hostcards.html"), "_blank", "noopener");
   };
 
   const handleOpenLeaderboard = () => {

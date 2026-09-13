@@ -694,7 +694,8 @@ export class SoundManager {
     await Promise.all(
       SOUND_NAMES.map(async (name) => {
         try {
-          const res = await fetch(`/sfx/${name}.mp3`);
+          // BASE_URL 結尾一定帶 "/"（本機是 "/"，GitHub Pages 是 "/GuessActivity/"）
+          const res = await fetch(`${import.meta.env.BASE_URL ?? "/"}sfx/${name}.mp3`);
           if (!res || !res.ok) return;
           const arrayBuffer = await res.arrayBuffer();
           const buffer = await ctx.decodeAudioData(arrayBuffer);

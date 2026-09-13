@@ -58,6 +58,7 @@ Phase 1–6 全部完成：資料層、狀態機、投票模組、主畫面 UI�
 - **投票**：Google 表單網址樣板 `https://docs.google.com/forms/d/e/1FAIpQLScUjDTJ21TW_2ogSH0dVQFlfGwkxIGlkhkyi6KIjIX2Pys6Ug/viewform?usp=pp_url&entry.529223632={round}`；Apps Script 統計網址 `https://script.google.com/macros/s/AKfycbzxhxHTLXZjA9p-f7nuHUC2LWsgFHXFxDES3BW1lviabGLD26aOJewQCG08DFIVDpRa/exec`（手機實測投 B，統計收到 1 票）。
 - 以上網址都存在使用者 Chrome 的 localStorage（`quiz.settings.*`、`quiz.vote.settings.v1`），換瀏覽器要重新到設定頁填入。
 - GitHub repo `cosmos0409-yen/GuessActivity` 已經改為 **public**（使用者同意題目答案公開）。
+- **GitHub Pages**：https://cosmos0409-yen.github.io/GuessActivity/ 。推到 main 就會由 `.github/workflows/deploy-pages.yml` 在 ubuntu + Node 22 上自動打包並部署（避開本機 Node 24 打包會當掉的問題）。`vite.config.ts` 的 `base` 只在 `GITHUB_ACTIONS=true` 時設為 `/GuessActivity/`，本機 dev 維持 `/`。程式裡指向 `public/` 的路徑一律用 `src/utils/baseUrl.ts` 的 `assetUrl()`（音效用 `import.meta.env.BASE_URL`），**新增資源路徑時不要寫死 `/` 開頭**。Pages 版的 localStorage 和 localhost 是分開的，第一次使用要到遊戲設定頁重新填 4 個網址（見上）。
 
 ## 各階段狀態
 | 階段 | 狀態 | 產出 |
