@@ -17,6 +17,7 @@ const LEADERBOARD_SIZE = 5;
 const FINAL_SIZE = 10;
 const PODIUM_SIZE = 3;
 const RESERVED_CLOSE_CODES = [1005, 1006, 1015];
+const KICKED_CLOSE_CODE = 4403; // 前端看到這個代碼就不會自動重連
 
 export class GameRoom extends DurableObject {
   constructor(ctx, env) {
@@ -91,8 +92,35 @@ export class GameRoom extends DurableObject {
     return QUESTIONS[this.numMeta("questionIndex")];
   }
 
+  // 被踢出的玩家的作答不算進已作答人數、作答分布與排名
   answeredCount(questionIndex) {
-    return this.sql.exec(`SELECT COUNT(*) AS n FROM answers WHERE question_index = ?`, questionIndex).one().n;
+    return this.sql
+      .exec(
+        `SELECT COUNT(*) AS n FROM answers a JOIN players p ON p.player_id = a.player_id
+         WHERE a.question_index = ? AND p.kicked = 0`,
+        questionIndex,
+      )
+      .one().n;
+  }
+
+  answeredPlayerIds(questionIndex) {
+    return new Set(
+      this.sql
+        .exec(`SELECT player_id FROM answers WHERE question_index = ?`, questionIndex)
+        .toArray()
+        .map((row) => row.player_id),
+    );
+  }
+
+  // 在線玩家全部答完就提前結算。用「在線但還沒答的人數是否為 0」判斷，
+  // 而不是「已答人數 ≥ 在線人數」：答完就離線的人會讓後者誤判成全部答完。
+  async endIfAllAnswered() {
+    if (this.getMeta("phase") !== "question") return;
+    const online = this.onlinePlayerIds();
+    if (online.size === 0) return;
+    const answered = this.answeredPlayerIds(this.numMeta("questionIndex"));
+    for (const id of online) if (!answered.has(id)) return;
+    await this.endQuestion();
   }
 
   // ---------- HTTP：建立房間、WebSocket 升級 ----------
@@ -140,11 +168,13 @@ export class GameRoom extends DurableObject {
       case "start":
       case "next":
       case "end_question":
+      case "kick":
         if (ws.deserializeAttachment()?.role !== "host") {
           return this.send(ws, { type: "error", code: "NOT_HOST", message: "只有主持人可以操作" });
         }
         if (msg.type === "start") return this.handleStart(ws);
         if (msg.type === "next") return this.handleNext(ws);
+        if (msg.type === "kick") return this.handleKick(ws, msg);
         return this.endQuestion();
       default:
         return this.send(ws, { type: "error", code: "UNKNOWN_TYPE", message: `不支援的訊息：${msg?.type}` });
@@ -205,7 +235,9 @@ export class GameRoom extends DurableObject {
       });
       this.sendLobbyToHosts();
       if (phase === "question") this.sendAnswerCount();
-      if (phase === "result") this.send(ws, JSON.parse(this.getMeta("lastResult")));
+      // 主持人斷線／重新整理／換電腦後回來：補送目前畫面需要的資料。
+      // restored 讓前端知道這是補送的，不要把排行榜畫成「全部新進榜」。
+      if (phase === "result") this.send(ws, { ...JSON.parse(this.getMeta("lastResult")), restored: true });
       if (phase === "ended") this.sendFinalTo(ws, null);
       return;
     }
@@ -221,8 +253,9 @@ export class GameRoom extends DurableObject {
         .exec(`SELECT player_id, nickname, kicked FROM players WHERE player_id = ?`, msg.playerId)
         .toArray();
       if (rows.length && rows[0].kicked) {
+        ws.serializeAttachment({ role: "kicked", playerId: msg.playerId });
         this.send(ws, { type: "kicked" });
-        return ws.close(4403, "kicked");
+        return ws.close(KICKED_CLOSE_CODE, "kicked");
       }
       if (rows.length) player = { playerId: rows[0].player_id, nickname: rows[0].nickname };
     }
@@ -362,8 +395,62 @@ export class GameRoom extends DurableObject {
     if (!accepted) return;
 
     this.scheduleAnswerCount();
-    const online = this.onlinePlayerIds().size;
-    if (online > 0 && this.answeredCount(questionIndex) >= online) await this.endQuestion();
+    await this.endIfAllAnswered();
+  }
+
+  // ---------- 踢人（移除不當暱稱） ----------
+  // 被踢的玩家：資料列保留但標記 kicked=1（名單、排名、作答分布都不再計入），
+  // 連線收到 kicked 後以 4403 關閉；之後同一支手機帶著 playerId 回來也會被擋下。
+  async handleKick(ws, msg) {
+    const phase = this.getMeta("phase");
+    if (phase === "ended") {
+      return this.send(ws, { type: "error", code: "GAME_ENDED", message: "遊戲已結束，不能再移除玩家" });
+    }
+    const playerId = typeof msg.playerId === "string" ? msg.playerId : "";
+    const rows = this.sql
+      .exec(`SELECT nickname FROM players WHERE player_id = ? AND kicked = 0`, playerId)
+      .toArray();
+    if (!rows.length) {
+      return this.send(ws, { type: "error", code: "PLAYER_NOT_FOUND", message: "找不到這位玩家（可能已經被移除）" });
+    }
+    this.sql.exec(`UPDATE players SET kicked = 1 WHERE player_id = ?`, playerId);
+
+    for (const target of this.ctx.getWebSockets()) {
+      const att = target.deserializeAttachment();
+      if (att?.role !== "player" || att.playerId !== playerId) continue;
+      // 先改掉身分，關閉中的連線就不會再被算成在線，也不會收到之後的廣播
+      target.serializeAttachment({ role: "kicked", playerId });
+      this.send(target, { type: "kicked" });
+      try {
+        target.close(KICKED_CLOSE_CODE, "kicked");
+      } catch {
+        /* 已經關閉 */
+      }
+    }
+
+    for (const host of this.socketsByRole("host")) {
+      this.send(host, { type: "kick_done", playerId, nickname: rows[0].nickname });
+    }
+    this.broadcastLobby();
+
+    if (phase === "question") {
+      this.sendAnswerCount();
+      await this.endIfAllAnswered(); // 只剩被踢的人沒答時，不必再等倒數
+    } else if (phase === "result") {
+      // 答案揭曉畫面的前 5 名要馬上拿掉被踢的暱稱（重連的主持人也會拿到更新後的版本）
+      const standings = this.standings();
+      const last = JSON.parse(this.getMeta("lastResult"));
+      last.leaderboard = this.leaderboardOf(standings);
+      last.playerCount = standings.length;
+      this.setMeta("lastResult", JSON.stringify(last));
+      for (const host of this.socketsByRole("host")) {
+        this.send(host, { type: "leaderboard_update", leaderboard: last.leaderboard, playerCount: last.playerCount });
+      }
+    }
+  }
+
+  leaderboardOf(standings) {
+    return standings.slice(0, LEADERBOARD_SIZE).map(({ rank, nickname, score }) => ({ rank, nickname, score }));
   }
 
   async endQuestion() {
@@ -377,7 +464,11 @@ export class GameRoom extends DurableObject {
     const q = QUESTIONS[questionIndex];
     const distribution = q.choices.map(() => 0);
     for (const row of this.sql
-      .exec(`SELECT choice, COUNT(*) AS n FROM answers WHERE question_index = ? GROUP BY choice`, questionIndex)
+      .exec(
+        `SELECT a.choice, COUNT(*) AS n FROM answers a JOIN players p ON p.player_id = a.player_id
+         WHERE a.question_index = ? AND p.kicked = 0 GROUP BY a.choice`,
+        questionIndex,
+      )
       .toArray()) {
       distribution[row.choice] = row.n;
     }
@@ -390,7 +481,7 @@ export class GameRoom extends DurableObject {
       distribution,
       answered: distribution.reduce((a, b) => a + b, 0),
       playerCount: standings.length,
-      leaderboard: standings.slice(0, LEADERBOARD_SIZE).map(({ rank, nickname, score }) => ({ rank, nickname, score })),
+      leaderboard: this.leaderboardOf(standings),
       isLast: questionIndex === QUESTIONS.length - 1,
     };
     this.setMeta("lastResult", JSON.stringify(payload));
@@ -434,16 +525,16 @@ export class GameRoom extends DurableObject {
       verifyCode: String(Math.floor(1000 + Math.random() * 9000)),
     }));
     this.setMeta("final", JSON.stringify({ podium }));
+    // 排名只算一次再發給每個人（150 人時逐一重算會讓最後一人多等約 0.1 秒）
     for (const ws of this.ctx.getWebSockets()) {
       if (ws.readyState !== 1) continue;
       const { role, playerId } = ws.deserializeAttachment() ?? {};
-      if (role) this.sendFinalTo(ws, role === "player" ? playerId : null);
+      if (role === "host" || role === "player") this.sendFinalTo(ws, role === "player" ? playerId : null, standings, podium);
     }
   }
 
-  sendFinalTo(ws, playerId) {
-    const standings = this.standings();
-    const { podium } = JSON.parse(this.getMeta("final") ?? '{"podium":[]}');
+  sendFinalTo(ws, playerId, standings = this.standings(), podium = null) {
+    podium ??= JSON.parse(this.getMeta("final") ?? '{"podium":[]}').podium;
     const base = {
       type: "game_end",
       playerCount: standings.length,

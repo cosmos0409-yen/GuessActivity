@@ -4,7 +4,7 @@ import { CHOICE_STYLES } from "/shared/choices.js";
 
 const URGENT_MS = 5000;
 const $ = (id) => document.getElementById(id);
-const SECTIONS = ["join-form", "waiting", "question", "submitted", "result", "final"];
+const SECTIONS = ["join-form", "waiting", "question", "submitted", "result", "final", "kicked"];
 // playerId 依房間分開存：重新整理或斷線重連時帶著它 join，伺服器會找回原本的暱稱與分數。
 const playerKey = (roomCode) => `liveQuiz.player.${roomCode}`;
 
@@ -137,8 +137,12 @@ function join(roomCode, nickname) {
           show("final");
           break;
         case "kicked":
-          show("join-form");
-          $("form-error").textContent = "你已被主持人移出房間";
+          // playerId 留在 localStorage：重新整理後伺服器會再擋一次，不會變回新玩家。
+          // 連線以 4403 關閉，ws-client 不會自動重連。
+          clearInterval(timer);
+          current = null;
+          $("p-name").hidden = true;
+          show("kicked");
           break;
         case "error":
           show("join-form");

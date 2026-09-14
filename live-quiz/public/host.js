@@ -18,9 +18,25 @@ let lastPlayerCount = 0;
 const nameItems = new Map(); // playerId → <li>，暱稱牆只新增／更新，不整片重畫（新名字才會有彈出動畫）
 let prevRanks = new Map(); // 暱稱 → 上一題的名次，用來顯示「▲ 上升」
 let prevScores = new Map(); // 暱稱 → 上一題的分數，用來做分數跳動動畫
+let currentRoom = null; // { roomCode, hostToken }
+let playersList = []; // 最新的完整名單（lobby_update），玩家名單對話框用
+let pendingKick = null; // 等待確認要移出的玩家 { playerId, nickname }
+let flashTimer = null;
 
 function show(section) {
   for (const id of SECTIONS) $(id).hidden = id !== section;
+  const inRoom = section !== "setup";
+  $("manage").hidden = !inRoom || section === "final";
+  $("takeover").hidden = !inRoom;
+}
+
+// 短暫提示（例如「已移出 OOO」），3 秒後自動消失
+function flash(text) {
+  clearTimeout(flashTimer);
+  $("status").textContent = text;
+  flashTimer = setTimeout(() => {
+    if ($("status").textContent === text) $("status").textContent = "";
+  }, 3000);
 }
 
 function el(tag, className, text) {
@@ -52,6 +68,23 @@ function saveHost(host) {
   } catch {
     /* 私密瀏覽模式存不進去也沒關係，只是重新整理後要重開房間 */
   }
+}
+
+function forgetHost() {
+  try {
+    localStorage.removeItem(HOST_KEY);
+  } catch {
+    /* 忽略 */
+  }
+}
+
+// 備援電腦接手：開啟「host.html#takeover=房間碼.主持人驗證碼」就會存進這台電腦並進入房間。
+// 驗證碼只放在網址的 # 後面（瀏覽器不會把 # 之後送到伺服器），讀完立刻從網址列清掉，避免投影出來。
+function readTakeoverHash() {
+  const match = /^#takeover=(\d{6})\.([0-9a-f-]{36})$/i.exec(location.hash);
+  if (!match) return null;
+  history.replaceState(null, "", location.pathname + location.search);
+  return { roomCode: match[1], hostToken: match[2] };
 }
 
 function tile(i, text) {
@@ -89,12 +122,16 @@ function renderLobby(msg) {
   }
   lastPlayerCount = msg.playerCount;
 
+  playersList = msg.players;
   const seen = new Set();
   for (const p of msg.players) {
     seen.add(p.playerId);
     let item = nameItems.get(p.playerId);
     if (!item) {
       item = el("li", "", p.nickname);
+      item.dataset.playerId = p.playerId;
+      item.tabIndex = 0;
+      item.setAttribute("role", "button");
       nameItems.set(p.playerId, item);
       $("players").append(item);
     }
@@ -106,6 +143,35 @@ function renderLobby(msg) {
       nameItems.delete(id);
     }
   }
+  if ($("players-dialog").open) renderPlayersDialog();
+}
+
+// ---------- 踢人 ----------
+function askKick(playerId) {
+  const player = playersList.find((p) => p.playerId === playerId);
+  if (!player) return;
+  pendingKick = player;
+  $("kick-name").textContent = player.nickname;
+  $("kick-dialog").showModal();
+  $("kick-cancel").focus(); // 預設焦點放在「取消」，避免誤按 Enter 就踢人
+}
+
+function renderPlayersDialog() {
+  const keyword = $("pd-filter").value.trim();
+  const list = keyword ? playersList.filter((p) => p.nickname.includes(keyword)) : playersList;
+  $("pd-count").textContent = playersList.length;
+  $("pd-list").replaceChildren(
+    ...(list.length
+      ? list.map((p) => {
+          const item = el("li", p.online ? "" : "offline");
+          const btn = el("button", "btn btn-danger", "移出");
+          btn.type = "button";
+          btn.addEventListener("click", () => askKick(p.playerId));
+          item.append(el("span", "pd-name", p.nickname + (p.online ? "" : "（離線）")), btn);
+          return item;
+        })
+      : [el("li", "pd-empty", keyword ? "沒有符合的暱稱" : "還沒有人加入")]),
+  );
 }
 
 // ---------- 出題 ----------
@@ -175,23 +241,29 @@ function renderResult(r) {
   // 先畫出 0 寬度，下一個 frame 再設定目標寬度，長條才會「長出來」
   requestAnimationFrame(() => requestAnimationFrame(() => fills.forEach(([f, pct]) => (f.style.width = `${pct}%`))));
 
-  $("r-leaderboard").replaceChildren(
-    ...r.leaderboard.map((p) => {
-      const item = el("li");
-      const before = prevRanks.get(p.nickname);
-      const moved = before ? before - p.rank : 0;
-      const move = el("span", "lb-move", before === undefined && r.questionIndex > 0 ? "新進榜" : moved > 0 ? `▲ ${moved}` : "");
-      const score = el("span", "lb-score", String(prevScores.get(p.nickname) ?? 0));
-      item.append(el("span", "rank-badge", String(p.rank)), el("span", "lb-name", p.nickname), move, score);
-      countUp(score, prevScores.get(p.nickname) ?? 0, p.score);
-      return item;
-    }),
-  );
-  prevRanks = new Map(r.leaderboard.map((p) => [p.nickname, p.rank]));
-  prevScores = new Map(r.leaderboard.map((p) => [p.nickname, p.score]));
+  // restored：主持人斷線後回來補送的結果，沒有「上一題」可以比較，不顯示名次變化與分數動畫
+  renderLeaderboard(r.leaderboard, { showMoves: !r.restored && r.questionIndex > 0, animate: !r.restored });
 
   $("next").textContent = r.isLast ? "看最終排名" : "下一題";
   show("result");
+}
+
+function renderLeaderboard(leaderboard, { showMoves, animate }) {
+  $("r-leaderboard").replaceChildren(
+    ...leaderboard.map((p) => {
+      const item = el("li");
+      const before = prevRanks.get(p.nickname);
+      const moved = before ? before - p.rank : 0;
+      const label = !showMoves ? "" : before === undefined ? "新進榜" : moved > 0 ? `▲ ${moved}` : "";
+      const from = animate ? (prevScores.get(p.nickname) ?? 0) : p.score;
+      const score = el("span", "lb-score", String(from));
+      item.append(el("span", "rank-badge", String(p.rank)), el("span", "lb-name", p.nickname), el("span", "lb-move", label), score);
+      countUp(score, from, p.score);
+      return item;
+    }),
+  );
+  prevRanks = new Map(leaderboard.map((p) => [p.nickname, p.rank]));
+  prevScores = new Map(leaderboard.map((p) => [p.nickname, p.score]));
 }
 
 // ---------- 最終排名 ----------
@@ -237,6 +309,7 @@ function launchConfetti() {
 
 // ---------- 連線 ----------
 function enterRoom({ roomCode, hostToken }) {
+  currentRoom = { roomCode, hostToken };
   $("room-code").textContent = roomCode;
   $("top-room").textContent = `房間 ${roomCode}`;
   $("top-room").hidden = false;
@@ -274,10 +347,21 @@ function enterRoom({ roomCode, hostToken }) {
         case "game_end":
           renderFinal(msg);
           break;
+        case "kick_done":
+          flash(`已移出「${msg.nickname}」`);
+          break;
+        case "leaderboard_update":
+          // 答案揭曉畫面移出玩家後，前 5 名直接換成新名單（不重播動畫）
+          renderLeaderboard(msg.leaderboard, { showMoves: false, animate: false });
+          break;
         case "error":
-          $("status").textContent = msg.message;
+          flash(msg.message);
           if (msg.code === "ROOM_NOT_FOUND" || msg.code === "BAD_HOST_TOKEN") {
-            localStorage.removeItem(HOST_KEY);
+            forgetHost();
+            conn?.close();
+            conn = null;
+            currentRoom = null;
+            $("create").disabled = false;
             show("setup");
           }
           break;
@@ -305,6 +389,66 @@ $("start").addEventListener("click", () => conn?.send({ type: "start" }));
 $("next").addEventListener("click", () => conn?.send({ type: "next" }));
 $("end-question").addEventListener("click", () => conn?.send({ type: "end_question" }));
 
-const saved = loadHost();
+// 暱稱牆：點名字（或聚焦後按 Enter）→ 確認後移出
+$("players").addEventListener("click", (event) => {
+  const item = event.target.closest("li[data-player-id]");
+  if (item) askKick(item.dataset.playerId);
+});
+$("players").addEventListener("keydown", (event) => {
+  const item = event.target.closest("li[data-player-id]");
+  if (item && (event.key === "Enter" || event.key === " ")) {
+    event.preventDefault();
+    askKick(item.dataset.playerId);
+  }
+});
+$("kick-cancel").addEventListener("click", () => $("kick-dialog").close());
+$("kick-confirm").addEventListener("click", () => {
+  if (pendingKick) conn?.send({ type: "kick", playerId: pendingKick.playerId });
+  pendingKick = null;
+  $("kick-dialog").close();
+});
+
+$("manage").addEventListener("click", () => {
+  $("pd-filter").value = "";
+  renderPlayersDialog();
+  $("players-dialog").showModal();
+});
+$("pd-filter").addEventListener("input", renderPlayersDialog);
+$("pd-close").addEventListener("click", () => $("players-dialog").close());
+
+// 接手連結只複製到剪貼簿、不顯示在畫面上（主持人畫面會投影，驗證碼不能讓觀眾看到）
+$("takeover").addEventListener("click", async () => {
+  if (!currentRoom) return;
+  const link = `${location.origin}${location.pathname}#takeover=${currentRoom.roomCode}.${currentRoom.hostToken}`;
+  try {
+    await navigator.clipboard.writeText(link);
+    flash("已複製接手連結：在備援電腦開啟就能接手這個房間（不要貼到公開的地方）");
+  } catch {
+    flash("無法複製（瀏覽器不允許存取剪貼簿）");
+  }
+});
+
+$("new-room").addEventListener("click", () => {
+  if (!confirm("要結束這個房間、建立新的房間嗎？")) return;
+  forgetHost();
+  conn?.close();
+  conn = null;
+  currentRoom = null;
+  nameItems.clear();
+  $("players").replaceChildren();
+  playersList = [];
+  lastPlayerCount = 0;
+  prevRanks = new Map();
+  prevScores = new Map();
+  $("create").disabled = false;
+  $("top-room").hidden = true;
+  $("top-count").hidden = true;
+  $("confetti").replaceChildren();
+  show("setup");
+});
+
+const takeover = readTakeoverHash();
+if (takeover) saveHost(takeover);
+const saved = takeover ?? loadHost();
 if (saved?.roomCode && saved?.hostToken) enterRoom(saved);
 else show("setup");

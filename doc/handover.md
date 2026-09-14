@@ -1,6 +1,6 @@
 # 交接手冊 — 司法官學院 闖關猜謎 App
 
-> 最後更新：2026-09-14（搶答系統階段 3 完成）
+> 最後更新：2026-09-14（搶答系統階段 4 完成並部署，正式環境 150 人壓力測試通過）
 > 完整計畫：`C:\Users\user\.claude\plans\app-1-10-2-3-3-stateless-charm.md`（規則、美術、架構都以此為準；2026-09-13 已在計畫檔裡標註保底關取消的異動）
 
 ## 🚀 下一個 session 從這裡開始（2026-09-14）
@@ -9,18 +9,20 @@
 
 | 系統 | 位置 | 網址 | 狀態 |
 |---|---|---|---|
-| **全場搶答**（Kahoot 式，150 人選 3 人） | `live-quiz/`（原生 HTML/JS＋Cloudflare Workers＋SQLite-backed Durable Objects） | https://live-quiz.cosmos0409.workers.dev | 階段 1–3 完成、已部署、使用者實機測過階段 1–2 |
+| **全場搶答**（Kahoot 式，150 人選 3 人） | `live-quiz/`（原生 HTML/JS＋Cloudflare Workers＋SQLite-backed Durable Objects） | https://live-quiz.cosmos0409.workers.dev | 階段 1–4 已部署（階段 4 版本 94ddea51）；使用者實機測過階段 1–2 |
 | **闖關猜謎**（百萬小學堂式，3 人上台） | 專案根目錄（Vite＋React＋TS） | https://cosmos0409-yen.github.io/GuessActivity/ | 功能完成；題庫 152 題（上架 149）已同步到使用者的 Google 試算表 |
 
+**搶答系統階段 4（2026-09-14 完成並部署）**：主持人踢人、主持人斷線恢復、150 人壓力測試都已完成；報告在 `docs/搶答系統-壓力測試報告.md`。Claude 的部署指令被權限規則擋下，改由**使用者自己在 PowerShell 部署**（在 `C:\猜謎程式\live-quiz` 執行 `npx wrangler deploy`，版本 `94ddea51`），並對正式網址跑 150 人壓力測試，35／35 通過，結算約 0.15 秒。**下一步：使用者用真的手機測試（鎖屏、切換網路、踢人畫面）**，之後進入階段 5。細節見下方「搶答系統階段 4 紀錄」。
+
 **搶答系統剩下的階段**（規格確認文件：`docs/搶答系統-Cloudflare規格確認.md`，每個階段做完都要停下來讓使用者測試）：
-- **階段 4 韌性（最優先）**：主持人踢人（`kick`）、主持人斷線恢復、**150 人壓力測試**（用 `live-quiz/tools/bots.mjs` 改寫，模擬 150 條 WebSocket 同時加入與作答，量測結算延遲；**不要在活動當天跑**）。
 - **階段 5 題庫**：主持人建房時可以選擇讀取 Google 試算表的「搶答題」分頁（CSV 由主持人瀏覽器讀取後上傳給 DO，正解不能讓玩家讀到）、圖片題（圖檔放 `live-quiz/public/img/`，由使用者提供）；目前題庫是 `live-quiz/src/questions.js` 的 5 題測試題，規格是 10 題 × 20 秒。
 - **階段 6 文件**：`live-quiz/README.md`（安裝 wrangler、`wrangler dev`、部署、換題庫、查看免費額度的位置），並更新根目錄 README 與 CLAUDE.md。
 
 **搶答系統常用指令**（都在 `live-quiz/` 底下，Bash 要先修 PATH，見下方環境地雷）：
 - 本機：`npx wrangler dev --port 8787`
 - 部署：`CI=1 npx wrangler deploy`（wrangler 4.131.1，這台電腦已經 `wrangler login`）
-- 流程測試：`node tools/flow-test.mjs [網址]`（32 項；不帶參數時測本機）
+- 流程測試：`node tools/flow-test.mjs [網址]`（42 項；不帶參數時測本機）
+- 壓力測試：`node tools/loadtest.mjs [網址] [人數]`（預設 150 人、35 項檢查＋延遲量測；**不要在活動當天對正式網址跑**）
 - 模擬玩家：`node tools/bots.mjs [網址] [人數] [房間碼]`
 - 正式環境即時紀錄：`npx wrangler tail live-quiz --format pretty`
 - 退回階段 1：git tag `live-quiz-stage-1`
@@ -154,6 +156,15 @@ Phase 1–6 全部完成：資料層、狀態機、投票模組、主畫面 UI�
 - **2026-09-14 搶答系統階段 1 完成並部署**：程式在 `live-quiz/`（原生 HTML/JS，沒有打包工具）；正式網址 **https://live-quiz.cosmos0409.workers.dev**（使用者的 Cloudflare 帳號，workers.dev 子網域是 `cosmos0409`，可以在 dashboard 的 Workers & Pages 右側 Subdomain 旁的鉛筆圖示改名）。部署：在 `live-quiz/` 執行 `CI=1 npx wrangler deploy`（wrangler 4.131.1，已經 `wrangler login`）；本機：`npx wrangler dev --port 8787`。已完成：建立房間（`POST /api/rooms`）、hostToken 驗證、WebSocket Hibernation、玩家加入就寫入 SQLite、名單只給主持人、playerId 重連、同名自動加 `#2`。本機 Node 模擬測試 11 項全部通過（測試腳本目前寫在指令裡，還沒存成檔案；階段 4 會存成 `tools/`）。踩過的坑：`webSocketClose` 裡把 1005 代碼照抄傳給 `ws.close()` 會丟出 InvalidAccessError。**下一步：使用者用電腦加手機測試階段 1 → 階段 2（完整答題流程）**。
 - **2026-09-14 搶答系統階段 2 完成並部署**（使用者同意在實機測試階段 1 前先做；階段 1 已打 git tag `live-quiz-stage-1` 可退回）。加入 QR code（`public/shared/qrcode.mjs`，qrcode-generator 2.0.4，MIT）、完整答題流程（開始 → 出題 → DO alarm 倒數 → 作答 → 結算 → 下一題 → 結束）、伺服器計時計分（`src/scoring.js`）、只採計第一次作答、全員答完提前結算、前 10 名＋前 3 名 4 位數驗證碼、出題中重連。**測試**：`node tools/flow-test.mjs [網址]`（32 項；不帶參數測本機 127.0.0.1:8787）。踩過的坑：CSS 的 `.stack{display:flex}` 會蓋過 `[hidden]`，已在 style.css 最前面加 `[hidden]{display:none!important}`。仍然是陽春介面（階段 3 美化）；尚未實作：踢人、主持人斷線恢復的完整測試、壓力測試（階段 4）、試算表題庫與圖片題（階段 5）。**真實手機＋行動網路尚未測試**。（2026-09-14 更新：使用者已用電腦＋手機實測階段 1、2，沒有問題）
 - **2026-09-14 搶答系統階段 3 完成並部署（視覺設計）**：樣式拆成 `public/style.css`（院徽色系 tokens、按鈕、動畫、`prefers-reduced-motion`）、`host.css`（投影幕）、`play.css`（手機）；院徽圖 `public/brand/emblem.jpg`。主持人：標題列加院徽與官方英文名、放大的 QR 與房間碼、人數跳動、暱稱牆（只新增不重畫，新名字才有彈出動畫）、題目進度點、conic-gradient 圓環倒數（剩 5 秒轉紅脈動）、已作答進度條、答案揭曉長條依序長出、正確答案金框、前 5 名滑入＋分數跳動＋「▲ 上升／新進榜」、頒獎台依第 3→2→1 名升起＋彩帶。手機：大色塊佔滿畫面、送出後顯示所選色塊（支援的手機會震動）、結果整頁綠／紅／灰、前 3 名金色驗證碼卡。**字型不內嵌**（Noto 700＋900 兩個粗細就有 7–9 MB、800 多個檔），改用各平台內建中文字型。新增 `tools/bots.mjs`（模擬 N 位玩家自動作答；房間資訊寫到 `tools/.last-room.json`，已加入 .gitignore）。已在 Chrome 1530×784 與手機尺寸逐畫面截圖確認。
+- **2026-09-14 搶答系統階段 4 紀錄（韌性，已部署，版本 94ddea51）**：
+  - **踢人**：主持人送 `kick {playerId}`（只接受主持人）。伺服器把 `players.kicked` 設為 1，被踢者收到 `kicked` 後連線以 4403 關閉（前端不重連），之後帶同一個 playerId 回來也會被擋；主持人收到 `kick_done`。作答人數、作答分布、排名都排除被踢的人（`answeredCount` 與分布查詢改成 JOIN players）。出題中踢人會重新檢查「全員答完」；答案揭曉時踢人會更新 `lastResult`，並送 `leaderboard_update` 給主持人。遊戲結束後不能踢（`GAME_ENDED`）。主持人介面：點暱稱牆的名字，或標題列的「玩家名單」（可搜尋，出題中也能用）→ 確認對話框（預設焦點在「取消」）。手機顯示「你已被主持人移出房間」專屬畫面。
+  - **提前結算判斷修正**：原本用「已答人數 ≥ 在線人數」，答完就離線的人會讓它誤判；改成 `endIfAllAnswered()`，判斷「在線但還沒答的人是否為 0」。
+  - **主持人斷線恢復**：重連時伺服器補送的結算帶 `restored: true`，前端不顯示「新進榜／▲」、不播分數動畫。新增「複製接手連結」按鈕，連結是 `host.html#takeover=房間碼.主持人驗證碼`（路徑沿用目前網址，wrangler 會把 /host.html 轉成 /host），只複製到剪貼簿、不顯示在投影畫面上；開啟後會存進 localStorage，並清掉網址列。最終排名畫面加上「建立新房間」。
+  - **連線韌性**（`public/shared/ws-client.js`，主持人與玩家共用）：ping 送出 8 秒沒收到 pong 就換新連線（處理手機鎖屏造成的假死連線）；`online` 事件與畫面回到前景時立即重連或先 ping 檢查；被換掉的舊連線晚到的事件一律忽略。
+  - **效能**：`endGame` 的排名只算一次再發給每個人。150 人時最終排名從 139 ms 降到 59 ms。
+  - **測試**：`node tools/flow-test.mjs` 從 32 項增加到 **42 項**（踢人、主持人恢復、錯誤驗證碼）；新增 `node tools/loadtest.mjs [網址] [人數]`（35 項檢查＋延遲量測，本機 150 人全部通過，報告在 `docs/搶答系統-壓力測試報告.md`）。主持人畫面的踢人、玩家名單搜尋、重新整理後恢復、接手連結，都已用內建瀏覽器以 DOM 檢查確認（視窗被隱藏時截圖會逾時，所以沒有截圖）。
+  - **部署與正式環境測試**：由使用者部署，正式環境 150 人 35／35 通過。注意：Claude 在這台電腦執行 `wrangler deploy` 會被權限規則擋下，要請使用者自己跑；使用者的 PowerShell 可以直接用 npx，不需要修 PATH。
+  - **未完成**：真實手機鎖屏與切換網路的測試。修改前的檔案備份在 `~/.claude/ops/backup-20260914/live-quiz-stage4/`。
 - ⚠️ **這台電腦的 Bash PATH 是 Windows 格式**，會找不到 node、grep、ls。每個指令前面先執行 `export PATH="/usr/bin:/mingw64/bin:/c/Program Files/nodejs:/c/Program Files/Git/cmd:/c/Program Files/GitHub CLI:/c/Users/user/AppData/Roaming/npm"`。
 - **（舊）全場搶答系統（Kahoot 式）**：規劃在 `docs/搶答系統計畫.md`，使用者已經決定：自己做、用 Supabase、10 題 × 20 秒、另開「搶答題」分頁、圖片由使用者提供。**等待使用者**：註冊 Supabase 並提供 Project URL 與 anon key、提供圖片檔、核可計畫後才開工。研究報告（Kahoot 計分公式、各方案額度與來源）在該 session 的 scratchpad `kahoot-research.md`，重點已經整理進計畫檔。
 - 這一輪還沒測到：指定人幫幫忙、全場一起協助（線上投票已經接好）、帶走、全破畫面、設定頁、主持人手卡、`?` 說明浮層。

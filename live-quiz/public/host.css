@@ -79,6 +79,57 @@
   animation: pop-in 0.35s ease both;
 }
 .name-wall li.offline { opacity: 0.35; }
+.name-wall li { cursor: pointer; }
+.name-wall li:hover, .name-wall li:focus-visible { background: rgba(200, 16, 46, 0.55); border-color: #ff9aa8; }
+.wall-hint { text-align: center; margin: 1.5rem 0 0; }
+.wall-hint + .name-wall { margin-top: 0.6rem; }
+
+/* ---- 標題列的小按鈕、對話框（踢人、玩家名單） ---- */
+.btn-sm { font-size: clamp(0.85rem, 1vw, 1.1rem); padding: 0.35rem 1rem; }
+.btn-danger { background: linear-gradient(180deg, #e2334d, var(--c0)); color: #fff; }
+.dialog {
+  border: 3px solid var(--gold);
+  border-radius: var(--radius-lg);
+  background: var(--navy-deep);
+  color: var(--cream);
+  padding: clamp(1.2rem, 2vw, 2rem);
+  width: min(92vw, 34rem);
+  box-shadow: var(--shadow-card);
+  font-size: clamp(1rem, 1.3vw, 1.4rem);
+}
+.dialog::backdrop { background: rgba(4, 5, 20, 0.7); }
+.dialog h3 { margin: 0 0 0.8rem; font-family: var(--font-heading); color: var(--gold); font-size: 1.4em; }
+.dialog-wide { width: min(92vw, 52rem); }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 0.8rem; margin-top: 1.2rem; }
+.dialog input[type="search"] {
+  width: 100%;
+  font-size: 1.1em;
+  padding: 0.6rem 0.9rem;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--gold-deep);
+}
+.pd-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.8rem 0 0;
+  max-height: 55vh;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: 0.5rem;
+}
+.pd-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.5rem 0.4rem 0.9rem;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.08);
+}
+.pd-list li.offline .pd-name { opacity: 0.45; }
+.pd-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pd-list .btn { font-size: 0.85em; padding: 0.3rem 0.9rem; }
+.pd-empty { opacity: 0.7; }
 
 /* ---- 出題 ---- */
 .q-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin: 0.25rem 0 1rem; }

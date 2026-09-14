@@ -137,7 +137,61 @@ const lateFinal = await late.waitFor("game_end");
 ok(lateFinal.you?.verifyCode === null || lateFinal.you?.rank > 3, "非前 3 名沒有驗證碼");
 ok(final.podium.every((p) => p.playerId === undefined), "主持人收到的頒獎資料不含 playerId");
 
-for (const c of [host, late, ...players]) {
+// ---------- 階段 4：踢人、主持人斷線恢復 ----------
+const roomB = await (await fetch(`${BASE}/api/rooms`, { method: "POST" })).json();
+const hostB = await client(roomB.roomCode);
+hostB.send({ type: "join", role: "host", roomCode: roomB.roomCode, hostToken: roomB.hostToken });
+await hostB.waitFor("joined");
+const pB = [];
+for (const name of ["甲", "乙", "不當暱稱"]) {
+  const p = await client(roomB.roomCode);
+  p.closedCode = new Promise((r) => p.ws.addEventListener("close", (e) => r(e.code)));
+  p.send({ type: "join", role: "player", roomCode: roomB.roomCode, nickname: name });
+  p.playerId = (await p.waitFor("joined")).playerId;
+  pB.push(p);
+}
+pB[0].send({ type: "kick", playerId: pB[2].playerId });
+ok((await pB[0].waitFor("error")).code === "NOT_HOST", "玩家送 kick 被拒絕（NOT_HOST）");
+
+hostB.send({ type: "kick", playerId: pB[2].playerId });
+await pB[2].waitFor("kicked");
+ok((await pB[2].closedCode) === 4403, "等待室踢人：被踢的人收到 kicked、連線以 4403 關閉");
+const afterKick = await hostB.waitFor("lobby_update", (m) => m.playerCount === 2);
+ok(!afterKick.players.some((p) => p.nickname === "不當暱稱"), "等待室踢人：主持人名單拿掉這個暱稱");
+ok((await hostB.waitFor("kick_done")).nickname === "不當暱稱", "主持人收到 kick_done");
+hostB.send({ type: "kick", playerId: pB[2].playerId });
+ok((await hostB.waitFor("error", (m) => m.code === "PLAYER_NOT_FOUND")).code === "PLAYER_NOT_FOUND", "重複踢同一人回報 PLAYER_NOT_FOUND");
+const retry = await client(roomB.roomCode);
+retry.send({ type: "join", role: "player", roomCode: roomB.roomCode, nickname: "換個名字", playerId: pB[2].playerId });
+ok((await retry.waitFor("kicked")).type === "kicked", "被踢的人帶原本的 playerId 回來仍被擋下");
+
+hostB.send({ type: "start" });
+await pB[0].waitFor("question_start", (m) => m.questionIndex === 0);
+const qB = QUESTIONS[0];
+pB[0].send({ type: "answer", questionIndex: 0, choice: qB.correct });
+pB[1].send({ type: "answer", questionIndex: 0, choice: (qB.correct + 1) % 4 });
+const endB = await hostB.waitFor("question_end", (m) => m.questionIndex === 0, 5000);
+ok(endB.answered === 2 && endB.playerCount === 2, "被踢的人不影響「全員答完提前結算」與人數");
+
+hostB.send({ type: "kick", playerId: pB[0].playerId });
+const lbUpdate = await hostB.waitFor("leaderboard_update");
+ok(lbUpdate.leaderboard.length === 1 && lbUpdate.leaderboard[0].nickname === "乙", "答案揭曉時踢人：前 5 名立刻更新");
+
+hostB.ws.close();
+await wait(300);
+const hostB2 = await client(roomB.roomCode);
+hostB2.send({ type: "join", role: "host", roomCode: roomB.roomCode, hostToken: roomB.hostToken });
+const rejoinB = await hostB2.waitFor("joined");
+const restoredB = await hostB2.waitFor("question_end");
+ok(rejoinB.phase === "result" && restoredB.restored === true, "主持人斷線回來：補送答案揭曉（restored）");
+ok(restoredB.leaderboard.length === 1 && restoredB.playerCount === 1, "補送的結算已經拿掉被踢的人");
+hostB2.send({ type: "next" });
+ok((await hostB2.waitFor("question_start", (m) => m.questionIndex === 1)).questionIndex === 1, "重連後的主持人可以繼續下一題");
+const badHost = await client(roomB.roomCode);
+badHost.send({ type: "join", role: "host", roomCode: roomB.roomCode, hostToken: "00000000-0000-0000-0000-000000000000" });
+ok((await badHost.waitFor("error")).code === "BAD_HOST_TOKEN", "驗證碼錯誤不能接手主持人");
+
+for (const c of [host, late, ...players, hostB, hostB2, retry, badHost, ...pB]) {
   try {
     c.ws.close();
   } catch {

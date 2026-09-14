@@ -17,6 +17,8 @@
     <div class="topbar-right">
       <span id="top-room" class="chip" hidden></span>
       <span id="top-count" class="chip" hidden></span>
+      <button id="manage" class="btn btn-ghost btn-sm" type="button" hidden>玩家名單</button>
+      <button id="takeover" class="btn btn-ghost btn-sm" type="button" hidden title="複製後在另一台電腦開啟，就能接手這個房間">複製接手連結</button>
     </div>
   </header>
 
@@ -47,7 +49,8 @@
           <button id="start" class="btn btn-xl">開始遊戲</button>
         </div>
       </div>
-      <ul id="players" class="name-wall" aria-label="已加入的暱稱"></ul>
+      <p class="muted small wall-hint">點暱稱可以把不當暱稱移出房間</p>
+      <ul id="players" class="name-wall" aria-label="已加入的暱稱（點選可移出）"></ul>
     </section>
 
     <section id="question" hidden>
@@ -88,7 +91,25 @@
       <div id="podium" class="podium"></div>
       <ol id="final-list" class="final-list"></ol>
       <div id="confetti" class="confetti" aria-hidden="true"></div>
+      <div class="controls"><button id="new-room" class="btn btn-ghost" type="button">建立新房間</button></div>
     </section>
+
+    <dialog id="players-dialog" class="dialog dialog-wide" aria-labelledby="players-title">
+      <h3 id="players-title">玩家名單（<span id="pd-count">0</span> 人）</h3>
+      <input id="pd-filter" type="search" placeholder="搜尋暱稱" autocomplete="off">
+      <ul id="pd-list" class="pd-list"></ul>
+      <div class="dialog-actions"><button id="pd-close" class="btn" type="button">關閉</button></div>
+    </dialog>
+
+    <dialog id="kick-dialog" class="dialog" aria-labelledby="kick-title">
+      <h3 id="kick-title">移出玩家</h3>
+      <p>要把「<b id="kick-name"></b>」移出房間嗎？</p>
+      <p class="muted small">被移出的人會從名單與排名中消失，而且不能再用同一支手機回來。</p>
+      <div class="dialog-actions">
+        <button id="kick-cancel" class="btn btn-ghost" type="button">取消</button>
+        <button id="kick-confirm" class="btn btn-danger" type="button">移出</button>
+      </div>
+    </dialog>
 
     <p id="status" class="status" role="status"></p>
   </main>
