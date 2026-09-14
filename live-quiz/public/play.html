@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>加入搶答</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main class="center">
+    <form id="join-form" class="stack">
+      <h1>加入搶答</h1>
+      <label>房間碼
+        <input id="room" inputmode="numeric" pattern="\d{6}" maxlength="6" required autocomplete="off">
+      </label>
+      <label>暱稱（1–12 個字）
+        <input id="nickname" maxlength="12" required autocomplete="off">
+      </label>
+      <button class="btn" type="submit">加入</button>
+      <p id="form-error" class="error" role="alert"></p>
+    </form>
+
+    <section id="waiting" hidden>
+      <p class="muted">你的暱稱</p>
+      <p id="my-name" class="room-code"></p>
+      <p>等待主持人開始…</p>
+      <p class="muted">目前 <span id="count">0</span> 人已加入</p>
+      <p id="status" class="muted" role="status"></p>
+    </section>
+  </main>
+  <script type="module" src="/play.js"></script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+{
+  // 司法官學院 全場搶答：Cloudflare Workers + SQLite-backed Durable Objects
+  // 部署：npx wrangler deploy  →  https://live-quiz.<你的子網域>.workers.dev
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "live-quiz",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-09-01",
+
+  // Workers Static Assets：public/ 直接由 Cloudflare 提供；
+  // 只有 /api/* 與 /ws 需要先進 Worker（建立房間、WebSocket 升級）。
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*", "/ws"]
+  },
+
+  "durable_objects": {
+    "bindings": [{ "name": "GAME_ROOM", "class_name": "GameRoom" }]
+  },
+
+  // ⚠️ 免費方案只支援 SQLite backend：一定要用 new_sqlite_classes。
+  // 寫成 new_classes（舊的 KV backend）部署會失敗（錯誤碼 10097）。
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GameRoom"] }]
+}

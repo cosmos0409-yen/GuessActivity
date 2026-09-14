@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>主持人｜全場搶答</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main class="center">
+    <section id="setup">
+      <h1>主持人</h1>
+      <button id="create" class="btn">建立房間</button>
+      <p id="setup-error" class="error" role="alert"></p>
+    </section>
+
+    <section id="lobby" hidden>
+      <p class="muted">加入網址：<span id="join-url"></span></p>
+      <p class="muted">房間碼</p>
+      <p id="room-code" class="room-code"></p>
+      <p><strong id="player-count">0</strong> 人已加入（<span id="online-count">0</span> 人在線上）</p>
+      <ul id="players" class="player-list" aria-live="polite"></ul>
+      <p id="status" class="muted"></p>
+    </section>
+  </main>
+  <script type="module" src="/host.js"></script>
+</body>
+</html>
