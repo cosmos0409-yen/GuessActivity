@@ -25,7 +25,7 @@
   - 測試：新增 `node tools/bank-test.mjs`（23 項，純 Node）；`flow-test.mjs` 42 → **53 項**（上傳題庫、二選一、正解不外流、不合格題庫、413、圖片可讀）；150 人壓力測試 35／35。瀏覽器實測：用使用者現有的「題目」分頁（欄位名稱相容）讀到 50 題（上限）並成功出題；圖片題、2／3 選 1 版面都確認過，沒有 console 錯誤。
   - **試算表「搶答題」分頁已建立（2026-09-14，Claude 用使用者的 Chrome 輸入 5 列範例題）**：gid=1063568289，整份試算表原本就是「發布到網路」，所以 CSV 網址直接可用：`https://docs.google.com/spreadsheets/d/e/2PACX-1vQDMOTLgvahrEnSwzReVTj9CEbwKDgXjrAZ3Tu7h8mFLWTJlQr4gwfTOJjwLfSgFjbEhEeUxunp3viH/pub?gid=1063568289&single=true&output=csv`（解析結果 4 題、0 警告；「待審」那列被跳過）。編輯網址 `https://docs.google.com/spreadsheets/d/11pdA3ihVsfwWnpeCPwtvJTio29CVRlG51IikwY0Fj2E/edit`。操作注意：Chrome 視窗在背景時剪貼簿不能用，改用逐格輸入；**中文要先按 F2 進入編輯模式再輸入**（否則會被吃掉），Enter 會進入編輯而不是換列，每列開頭用網址 `#gid=…&range=A2` 跳過去並檢查分頁名稱與名稱方塊。
   - **等使用者**：換成正式的 10 題與圖片；自己部署；實機測試。修改前的檔案備份在 `~/.claude/ops/backup-20260914/live-quiz-stage5/`。
-- **階段 6 文件**：`live-quiz/README.md`（安裝 wrangler、`wrangler dev`、部署、換題庫、查看免費額度的位置），並更新根目錄 README 與 CLAUDE.md。
+- **階段 6 文件（2026-09-14 完成）**：新增 `live-quiz/README.md`（架構、安裝、本機執行、部署、活動當天流程與出狀況的處理、換題庫與圖片題、測試指令、免費額度、疑難排解）；根目錄 `README.md` 開頭加上兩套系統的對照與連結；根目錄 `CLAUDE.md` 加上 live-quiz 的目錄列、常用指令、「部署由使用者執行」與「正解只能傳給主持人」兩條約束。**CLAUDE.md 的處理方式**：工作目錄裡原本就有一處不是 Claude 改的修改（刪掉檔尾的 `claude-md-12-rules` 管理區塊），commit 時只加入 Claude 新增的行，那段刪除仍然留在工作目錄、沒有 commit。修改前的備份在 `~/.claude/ops/backup-20260914/stage6/`。免費額度的 dashboard 查看位置沒有實際點過（寫成「Workers & Pages → live-quiz 的用量頁」並註明可能改版）。
 
 **搶答系統常用指令**（都在 `live-quiz/` 底下，Bash 要先修 PATH，見下方環境地雷）：
 - 本機：`npx wrangler dev --port 8787`
