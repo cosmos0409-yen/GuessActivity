@@ -1,9 +1,42 @@
 # 交接手冊 — 司法官學院 闖關猜謎 App
 
-> 最後更新：2026-09-13（第三輪修正）
+> 最後更新：2026-09-14（搶答系統階段 3 完成）
 > 完整計畫：`C:\Users\user\.claude\plans\app-1-10-2-3-3-stateless-charm.md`（規則、美術、架構都以此為準；2026-09-13 已在計畫檔裡標註保底關取消的異動）
 
-## 一句話現況
+## 🚀 下一個 session 從這裡開始（2026-09-14）
+
+這個 repo 裡有**兩個獨立的系統**，同一場活動先後使用：
+
+| 系統 | 位置 | 網址 | 狀態 |
+|---|---|---|---|
+| **全場搶答**（Kahoot 式，150 人選 3 人） | `live-quiz/`（原生 HTML/JS＋Cloudflare Workers＋SQLite-backed Durable Objects） | https://live-quiz.cosmos0409.workers.dev | 階段 1–3 完成、已部署、使用者實機測過階段 1–2 |
+| **闖關猜謎**（百萬小學堂式，3 人上台） | 專案根目錄（Vite＋React＋TS） | https://cosmos0409-yen.github.io/GuessActivity/ | 功能完成；題庫 152 題（上架 149）已同步到使用者的 Google 試算表 |
+
+**搶答系統剩下的階段**（規格確認文件：`docs/搶答系統-Cloudflare規格確認.md`，每個階段做完都要停下來讓使用者測試）：
+- **階段 4 韌性（最優先）**：主持人踢人（`kick`）、主持人斷線恢復、**150 人壓力測試**（用 `live-quiz/tools/bots.mjs` 改寫，模擬 150 條 WebSocket 同時加入與作答，量測結算延遲；**不要在活動當天跑**）。
+- **階段 5 題庫**：主持人建房時可以選擇讀取 Google 試算表的「搶答題」分頁（CSV 由主持人瀏覽器讀取後上傳給 DO，正解不能讓玩家讀到）、圖片題（圖檔放 `live-quiz/public/img/`，由使用者提供）；目前題庫是 `live-quiz/src/questions.js` 的 5 題測試題，規格是 10 題 × 20 秒。
+- **階段 6 文件**：`live-quiz/README.md`（安裝 wrangler、`wrangler dev`、部署、換題庫、查看免費額度的位置），並更新根目錄 README 與 CLAUDE.md。
+
+**搶答系統常用指令**（都在 `live-quiz/` 底下，Bash 要先修 PATH，見下方環境地雷）：
+- 本機：`npx wrangler dev --port 8787`
+- 部署：`CI=1 npx wrangler deploy`（wrangler 4.131.1，這台電腦已經 `wrangler login`）
+- 流程測試：`node tools/flow-test.mjs [網址]`（32 項；不帶參數時測本機）
+- 模擬玩家：`node tools/bots.mjs [網址] [人數] [房間碼]`
+- 正式環境即時紀錄：`npx wrangler tail live-quiz --format pretty`
+- 退回階段 1：git tag `live-quiz-stage-1`
+
+**環境地雷**：
+- **Bash 的 PATH 是 Windows 格式**，會找不到 node、grep、ls。每個指令前面先執行 `export PATH="/usr/bin:/mingw64/bin:/c/Program Files/nodejs:/c/Program Files/Git/cmd:/c/Program Files/GitHub CLI:/c/Users/user/AppData/Roaming/npm"`。
+- 中文路徑下 **Glob 工具會失效**，改用 `ls` 或 Grep。
+- 闖關遊戲：**本機不要 `npm run build`**（Node 24＋rollup 會當掉），Pages 由 GitHub Actions 打包；測試用 `npx vitest run`（197 個），**push 前一定要確認全綠**。
+- 內建預覽窗格模擬 1920×1080 時截圖會縮得看不清楚：看主持人畫面改用 Chrome（claude-in-chrome）；同一個瀏覽器的主持人分頁與玩家分頁共用 localStorage，**測試時不要 `localStorage.clear()`**。
+- Google 試算表貼資料：`navigator.clipboard.writeText` 只能在前景分頁、Chrome 視窗在最前面時使用；**不要用座標點儲存格**，改用網址 `#gid=0&range=A54` 跳過去，截圖確認名稱方塊後再貼上。
+- 主線模型是 Opus 時照使用者全域規則「親自做」，只在需要大量平行或大量讀檔時才派 subagent；派工時禁止二度轉包。
+- 專案根目錄的 `CLAUDE.md` 有一處不是 Claude 改的修改（應該是使用者的 CLAUDE.md 維護工具），**不要動它、也不要把它加進 commit**。
+
+**等使用者提供**：搶答題的題目與圖片、各關獎勵內容、院徽的正式高解析檔與使用同意。
+
+## 一句話現況（闖關猜謎，2026-09-13 的紀錄）
 Phase 1–6 全部完成：資料層、狀態機、投票模組、主畫面 UI、提示卡、合成音效、快捷鍵、設定頁、彩排模式、排行榜、主持人手卡都已就位。Phase 9（README.md／docs/題庫維護說明.md／CLAUDE.md）已完成。**2026-09-13 第三輪：修好「第二輪試玩待辦清單」剩下的 6 個問題**（詳見下方「2026-09-13 第三輪修正紀錄」），測試從 191 增加到 **197 個全綠**，`npx tsc --noEmit` 0 錯誤，1366×768／1920×1080／1536×864／1280×720 都已用 Browser 工具實測量過版面不重疊、不捲動。`npm run build` 在 Node 24 會當掉的問題仍待處理（見已知問題，GitHub Pages 走 Actions 打包不受影響）。
 
 ## 2026-09-13 第三輪修正紀錄（「第二輪試玩：待辦清單」全部處理完畢）
