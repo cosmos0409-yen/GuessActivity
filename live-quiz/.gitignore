@@ -1,3 +1,5 @@
 node_modules/
 .wrangler/
 .dev.vars
+# 模擬玩家腳本寫出的房間資訊（含主持人驗證碼）
+tools/.last-room.json

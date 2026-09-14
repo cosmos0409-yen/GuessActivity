@@ -5,15 +5,29 @@ import { CHOICE_STYLES } from "/shared/choices.js";
 import qrcode from "/shared/qrcode.mjs";
 
 const HOST_KEY = "liveQuiz.host";
+const URGENT_MS = 5000;
 const $ = (id) => document.getElementById(id);
 const SECTIONS = ["setup", "lobby", "question", "result", "final"];
+const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 let conn = null;
 let questions = [];
+let totalQuestions = 0;
 let timerFrame = null;
+let lastPlayerCount = 0;
+const nameItems = new Map(); // playerId → <li>，暱稱牆只新增／更新，不整片重畫（新名字才會有彈出動畫）
+let prevRanks = new Map(); // 暱稱 → 上一題的名次，用來顯示「▲ 上升」
+let prevScores = new Map(); // 暱稱 → 上一題的分數，用來做分數跳動動畫
 
 function show(section) {
   for (const id of SECTIONS) $(id).hidden = id !== section;
+}
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
 }
 
 function renderJoinQr(url) {
@@ -40,83 +54,192 @@ function saveHost(host) {
   }
 }
 
-function li(text, className) {
-  const el = document.createElement("li");
-  el.textContent = text;
-  if (className) el.className = className;
-  return el;
+function tile(i, text) {
+  const item = el("li", `tile ${CHOICE_STYLES[i].className}`);
+  item.append(el("span", "shape", CHOICE_STYLES[i].shape), el("span", "tile-text", text));
+  return item;
 }
 
-function choiceLabel(i, text) {
-  const style = CHOICE_STYLES[i];
-  return `${style.shape} ${text}`;
+function countUp(node, from, to) {
+  if (reducedMotion || from === to) {
+    node.textContent = to;
+    return;
+  }
+  const start = performance.now();
+  const step = (now) => {
+    const t = Math.min(1, (now - start) / 700);
+    node.textContent = Math.round(from + (to - from) * (1 - (1 - t) ** 3));
+    if (t < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+// ---------- 等待室 ----------
+function renderLobby(msg) {
+  $("player-count").textContent = msg.playerCount;
+  $("online-count").textContent = msg.onlineCount ?? msg.playerCount;
+  $("q-online").textContent = msg.onlineCount ?? msg.playerCount;
+  $("top-count").textContent = `${msg.playerCount} 人`;
+  $("top-count").hidden = false;
+  if (msg.playerCount > lastPlayerCount) {
+    const num = $("player-count");
+    num.classList.remove("bump");
+    void num.offsetWidth; // 重新觸發動畫
+    num.classList.add("bump");
+  }
+  lastPlayerCount = msg.playerCount;
+
+  const seen = new Set();
+  for (const p of msg.players) {
+    seen.add(p.playerId);
+    let item = nameItems.get(p.playerId);
+    if (!item) {
+      item = el("li", "", p.nickname);
+      nameItems.set(p.playerId, item);
+      $("players").append(item);
+    }
+    item.classList.toggle("offline", !p.online);
+  }
+  for (const [id, item] of nameItems) {
+    if (!seen.has(id)) {
+      item.remove();
+      nameItems.delete(id);
+    }
+  }
 }
 
 // ---------- 出題 ----------
+function renderProgress(index) {
+  $("q-progress").replaceChildren(
+    ...Array.from({ length: totalQuestions }, (_, i) =>
+      el("li", i < index ? "done" : i === index ? "current" : ""),
+    ),
+  );
+}
+
 function startTimer(startedAt, timeLimit) {
   cancelAnimationFrame(timerFrame);
+  const ring = $("timer");
   const tick = () => {
     const left = remainingMs(startedAt, timeLimit);
     $("q-seconds").textContent = Math.ceil(left / 1000);
-    $("q-bar").style.width = `${(left / (timeLimit * 1000)) * 100}%`;
+    ring.style.setProperty("--p", String(left / (timeLimit * 1000)));
+    ring.classList.toggle("urgent", left > 0 && left <= URGENT_MS);
     if (left > 0) timerFrame = requestAnimationFrame(tick);
   };
   tick();
 }
 
+function renderAnswerCount(answered, total) {
+  $("q-answered").textContent = answered;
+  $("q-online").textContent = total;
+  $("answer-bar").style.width = `${total ? Math.min(100, (answered / total) * 100) : 0}%`;
+}
+
 function renderQuestion(q) {
   syncClock(q.serverNow);
+  totalQuestions = q.totalQuestions;
   const question = questions[q.questionIndex];
-  $("q-number").textContent = q.questionIndex + 1;
-  $("q-total").textContent = q.totalQuestions;
+  $("q-number").textContent = `${q.questionIndex + 1}／${q.totalQuestions}`;
   $("q-text").textContent = question.text;
-  $("q-answered").textContent = "0";
-  $("q-choices").replaceChildren(
-    ...question.choices.map((text, i) => li(choiceLabel(i, text), `choice ${CHOICE_STYLES[i].className}`)),
-  );
+  $("q-image").hidden = !question.image;
+  if (question.image) $("q-image").src = question.image;
+  renderAnswerCount(0, Number($("q-online").textContent) || 0);
+  renderProgress(q.questionIndex);
+  $("q-choices").replaceChildren(...question.choices.map((text, i) => tile(i, text)));
   show("question");
   startTimer(q.startedAt, q.timeLimit);
 }
 
+// ---------- 答案揭曉 ----------
 function renderResult(r) {
   cancelAnimationFrame(timerFrame);
   const question = questions[r.questionIndex];
   $("r-number").textContent = r.questionIndex + 1;
   $("r-text").textContent = question.text;
-  const max = Math.max(1, ...r.distribution);
+  const total = Math.max(1, r.answered);
+  const fills = [];
   $("r-dist").replaceChildren(
     ...question.choices.map((text, i) => {
-      const item = li("", `dist-row ${CHOICE_STYLES[i].className}${i === r.correctChoice ? " correct" : ""}`);
-      const label = document.createElement("span");
-      label.className = "dist-label";
-      label.textContent = `${choiceLabel(i, text)}${i === r.correctChoice ? "　✓ 正確答案" : ""}`;
-      const bar = document.createElement("span");
-      bar.className = "dist-bar";
-      bar.style.width = `${(r.distribution[i] / max) * 100}%`;
-      const count = document.createElement("span");
-      count.className = "dist-count";
-      count.textContent = `${r.distribution[i]} 人`;
-      item.append(label, bar, count);
+      const item = tile(i, text);
+      const isCorrect = i === r.correctChoice;
+      item.classList.add(isCorrect ? "correct" : "dim");
+      const fill = el("span", "tile-fill");
+      item.prepend(fill);
+      fills.push([fill, (r.distribution[i] / total) * 100]);
+      if (isCorrect) item.append(el("span", "tile-check", "✓ 正確答案"));
+      item.append(el("span", "tile-count", `${r.distribution[i]} 人`));
       return item;
     }),
   );
-  $("r-leaderboard").replaceChildren(...r.leaderboard.map((p) => li(`${p.rank}. ${p.nickname}　${p.score} 分`)));
+  // 先畫出 0 寬度，下一個 frame 再設定目標寬度，長條才會「長出來」
+  requestAnimationFrame(() => requestAnimationFrame(() => fills.forEach(([f, pct]) => (f.style.width = `${pct}%`))));
+
+  $("r-leaderboard").replaceChildren(
+    ...r.leaderboard.map((p) => {
+      const item = el("li");
+      const before = prevRanks.get(p.nickname);
+      const moved = before ? before - p.rank : 0;
+      const move = el("span", "lb-move", before === undefined && r.questionIndex > 0 ? "新進榜" : moved > 0 ? `▲ ${moved}` : "");
+      const score = el("span", "lb-score", String(prevScores.get(p.nickname) ?? 0));
+      item.append(el("span", "rank-badge", String(p.rank)), el("span", "lb-name", p.nickname), move, score);
+      countUp(score, prevScores.get(p.nickname) ?? 0, p.score);
+      return item;
+    }),
+  );
+  prevRanks = new Map(r.leaderboard.map((p) => [p.nickname, p.rank]));
+  prevScores = new Map(r.leaderboard.map((p) => [p.nickname, p.score]));
+
   $("next").textContent = r.isLast ? "看最終排名" : "下一題";
   show("result");
 }
 
+// ---------- 最終排名 ----------
 function renderFinal(g) {
   cancelAnimationFrame(timerFrame);
+  const podium = g.podium ?? [];
+  // 頒獎台排列：第 2 名在左、第 1 名在中、第 3 名在右
+  const order = [2, 1, 3].map((rank) => podium.find((p) => p.rank === rank)).filter(Boolean);
   $("podium").replaceChildren(
-    ...(g.podium ?? []).map((p) => li(`第 ${p.rank} 名　${p.nickname}　${p.score} 分　驗證碼 ${p.verifyCode}`, "podium-item")),
+    ...order.map((p) => {
+      const col = el("div", `podium-col place-${p.rank}`);
+      if (p.rank === 1) col.append(el("span", "crown", "👑"));
+      col.append(
+        el("span", "podium-name", p.nickname),
+        el("span", "podium-score", `${p.score} 分`),
+        el("span", "podium-code", `驗證碼 ${p.verifyCode}`),
+        el("div", "podium-block", String(p.rank)),
+      );
+      return col;
+    }),
   );
-  $("final-list").replaceChildren(...g.finalLeaderboard.map((p) => li(`${p.rank}. ${p.nickname}　${p.score} 分（答對 ${p.correctCount} 題）`)));
+  $("final-list").replaceChildren(
+    ...g.finalLeaderboard.slice(3).map((p) => el("li", "", `${p.rank}. ${p.nickname}　${p.score} 分（答對 ${p.correctCount} 題）`)),
+  );
   show("final");
+  if (!reducedMotion) launchConfetti();
+}
+
+function launchConfetti() {
+  const colors = ["var(--gold)", "var(--c0)", "var(--c1)", "var(--c3)", "var(--cream)"];
+  const box = $("confetti");
+  box.replaceChildren(
+    ...Array.from({ length: 80 }, (_, i) => {
+      const piece = el("i");
+      piece.style.left = `${Math.random() * 100}%`;
+      piece.style.background = colors[i % colors.length];
+      piece.style.animationDuration = `${3 + Math.random() * 3}s`;
+      piece.style.animationDelay = `${2.3 + Math.random() * 1.5}s`; // 第 1 名升起後才開始撒
+      return piece;
+    }),
+  );
 }
 
 // ---------- 連線 ----------
 function enterRoom({ roomCode, hostToken }) {
   $("room-code").textContent = roomCode;
+  $("top-room").textContent = `房間 ${roomCode}`;
+  $("top-room").hidden = false;
   const joinUrl = `${location.origin}/play.html?room=${roomCode}`;
   $("join-url").textContent = joinUrl;
   renderJoinQr(joinUrl);
@@ -132,21 +255,18 @@ function enterRoom({ roomCode, hostToken }) {
         case "joined":
           syncClock(msg.serverNow);
           questions = msg.questions;
+          totalQuestions = msg.totalQuestions;
           if (msg.phase === "lobby") show("lobby");
           if (msg.phase === "question" && msg.question) renderQuestion(msg.question);
           break;
         case "lobby_update":
-          $("player-count").textContent = msg.playerCount;
-          $("online-count").textContent = msg.onlineCount ?? msg.playerCount;
-          $("q-online").textContent = msg.onlineCount ?? msg.playerCount;
-          $("players").replaceChildren(...msg.players.map((p) => li(p.nickname, p.online ? "" : "offline")));
+          renderLobby(msg);
           break;
         case "question_start":
           renderQuestion(msg);
           break;
         case "answer_count":
-          $("q-answered").textContent = msg.answered;
-          $("q-online").textContent = msg.total;
+          renderAnswerCount(msg.answered, msg.total);
           break;
         case "question_end":
           renderResult(msg);

@@ -3,59 +3,94 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>主持人｜全場搶答</title>
+  <title>主持人｜司法官學院 全場搶答</title>
   <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/host.css">
 </head>
-<body>
-  <main class="center wide">
-    <section id="setup">
-      <h1>主持人</h1>
-      <button id="create" class="btn">建立房間</button>
+<body class="host">
+  <header class="topbar">
+    <img class="emblem" src="/brand/emblem.jpg" alt="司法官學院院徽" width="60" height="60">
+    <div class="brand">
+      <strong>司法官學院 全場搶答</strong>
+      <span>Academy for the Judiciary, Ministry of Justice</span>
+    </div>
+    <div class="topbar-right">
+      <span id="top-room" class="chip" hidden></span>
+      <span id="top-count" class="chip" hidden></span>
+    </div>
+  </header>
+
+  <main class="stage">
+    <section id="setup" class="setup">
+      <img class="emblem" src="/brand/emblem.jpg" alt="" width="200" height="200">
+      <h1 class="title">全場搶答</h1>
+      <p class="muted">建立房間後，觀眾用手機掃描 QR code 加入</p>
+      <button id="create" class="btn btn-xl">建立房間</button>
       <p id="setup-error" class="error" role="alert"></p>
     </section>
 
     <section id="lobby" hidden>
-      <div class="join-panel">
-        <figure class="qr-box">
+      <div class="lobby-grid">
+        <figure class="qr-card">
           <div id="qr" role="img" aria-label="加入搶答的 QR code"></div>
-          <figcaption>手機掃描加入</figcaption>
+          <figcaption>手機掃描，立即加入</figcaption>
         </figure>
-        <div>
-          <p class="muted">房間碼</p>
+        <div class="lobby-info">
+          <p class="label">房間碼</p>
           <p id="room-code" class="room-code"></p>
-          <p class="muted">或開啟：<span id="join-url" class="join-url"></span></p>
+          <p class="join-url">或開啟 <span id="join-url"></span></p>
+          <div class="count-box">
+            <span id="player-count" class="count-num">0</span>
+            <span class="count-unit">人已加入</span>
+          </div>
+          <p class="muted">在線 <span id="online-count">0</span> 人</p>
+          <button id="start" class="btn btn-xl">開始遊戲</button>
         </div>
       </div>
-      <p><strong id="player-count">0</strong> 人已加入（<span id="online-count">0</span> 人在線上）</p>
-      <button id="start" class="btn">開始遊戲</button>
-      <ul id="players" class="player-list" aria-live="polite"></ul>
+      <ul id="players" class="name-wall" aria-label="已加入的暱稱"></ul>
     </section>
 
     <section id="question" hidden>
-      <p class="muted">第 <span id="q-number"></span> 題／共 <span id="q-total"></span> 題</p>
-      <h2 id="q-text" class="q-text"></h2>
-      <div class="timer" aria-hidden="true"><div id="q-bar" class="timer-bar"></div></div>
-      <p class="timer-text"><span id="q-seconds"></span> 秒　・　已作答 <strong id="q-answered">0</strong> / <span id="q-online">0</span></p>
-      <ol id="q-choices" class="choice-grid host"></ol>
-      <button id="end-question" class="btn btn-secondary">提前結束這一題</button>
+      <div class="q-head">
+        <ol id="q-progress" class="progress" aria-label="題目進度"></ol>
+        <p class="q-count">已作答 <strong id="q-answered">0</strong> / <span id="q-online">0</span></p>
+      </div>
+      <div class="q-main">
+        <div class="q-card">
+          <p class="q-label">第 <span id="q-number"></span> 題</p>
+          <h2 id="q-text" class="q-text"></h2>
+          <img id="q-image" class="q-image" alt="" hidden>
+        </div>
+        <div id="timer" class="timer-ring" role="timer" aria-label="剩餘秒數"><span id="q-seconds"></span><small>秒</small></div>
+      </div>
+      <div class="answer-meter" aria-hidden="true"><div id="answer-bar" class="answer-bar"></div></div>
+      <ol id="q-choices" class="tiles"></ol>
+      <div class="controls"><button id="end-question" class="btn btn-ghost">提前結束這一題</button></div>
     </section>
 
     <section id="result" hidden>
-      <p class="muted">第 <span id="r-number"></span> 題結果</p>
-      <h2 id="r-text" class="q-text"></h2>
-      <ol id="r-dist" class="dist"></ol>
-      <h3>目前前 5 名</h3>
-      <ol id="r-leaderboard" class="leaderboard"></ol>
-      <button id="next" class="btn">下一題</button>
+      <div class="result-grid">
+        <div>
+          <p class="q-label">第 <span id="r-number"></span> 題　答案揭曉</p>
+          <h2 id="r-text" class="r-text"></h2>
+          <ol id="r-dist" class="tiles result-tiles"></ol>
+        </div>
+        <aside class="board">
+          <h3>目前前 5 名</h3>
+          <ol id="r-leaderboard" class="leaderboard"></ol>
+        </aside>
+      </div>
+      <div class="controls"><button id="next" class="btn btn-xl">下一題</button></div>
     </section>
 
-    <section id="final" hidden>
-      <h2>最終排名</h2>
-      <ol id="podium" class="podium"></ol>
-      <ol id="final-list" class="leaderboard"></ol>
+    <section id="final" class="final" hidden>
+      <h2 class="title">最終排名</h2>
+      <div id="podium" class="podium"></div>
+      <ol id="final-list" class="final-list"></ol>
+      <div id="confetti" class="confetti" aria-hidden="true"></div>
     </section>
 
-    <p id="status" class="muted" role="status"></p>
+    <p id="status" class="status" role="status"></p>
   </main>
   <script type="module" src="/host.js"></script>
 </body>

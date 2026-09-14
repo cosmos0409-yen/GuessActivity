@@ -2,6 +2,7 @@ import { connectRoom } from "/shared/ws-client.js";
 import { syncClock, remainingMs } from "/shared/time-sync.js";
 import { CHOICE_STYLES } from "/shared/choices.js";
 
+const URGENT_MS = 5000;
 const $ = (id) => document.getElementById(id);
 const SECTIONS = ["join-form", "waiting", "question", "submitted", "result", "final"];
 // playerId 依房間分開存：重新整理或斷線重連時帶著它 join，伺服器會找回原本的暱稱與分數。
@@ -34,10 +35,12 @@ function writePlayerId(roomCode, playerId) {
 function startCountdown() {
   clearInterval(timer);
   const tick = () => {
-    const seconds = Math.ceil(remainingMs(current.startedAt, current.timeLimit) / 1000);
+    const left = remainingMs(current.startedAt, current.timeLimit);
+    const seconds = Math.ceil(left / 1000);
     $("q-seconds").textContent = seconds;
     $("s-seconds").textContent = seconds;
-    if (seconds <= 0) {
+    $("sec-pill").classList.toggle("urgent", left > 0 && left <= URGENT_MS);
+    if (left <= 0) {
       clearInterval(timer);
       for (const btn of $("choices").children) btn.disabled = true;
     }
@@ -49,19 +52,19 @@ function startCountdown() {
 function renderQuestion(q) {
   syncClock(q.serverNow);
   current = { questionIndex: q.questionIndex, startedAt: q.startedAt, timeLimit: q.timeLimit };
-  $("q-number").textContent = q.questionIndex + 1;
+  $("q-number").textContent = `${q.questionIndex + 1}／${q.totalQuestions}`;
   // 色塊＋形狀＋選項文字（使用者裁決 C1：題目本文只在投影幕）
   $("choices").replaceChildren(
     ...q.choices.map((text, i) => {
+      const style = CHOICE_STYLES[i];
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = `choice ${CHOICE_STYLES[i].className}`;
-      btn.setAttribute("aria-label", `${CHOICE_STYLES[i].name}色${CHOICE_STYLES[i].shape}：${text}`);
+      btn.className = `p-choice ${style.className}`;
+      btn.setAttribute("aria-label", `${style.name}色${style.shape}：${text}`);
       const shape = document.createElement("span");
       shape.className = "choice-shape";
-      shape.textContent = CHOICE_STYLES[i].shape;
+      shape.textContent = style.shape;
       const label = document.createElement("span");
-      label.className = "choice-text";
       label.textContent = text;
       btn.append(shape, label);
       btn.addEventListener("click", () => submit(i));
@@ -76,7 +79,23 @@ function submit(choice) {
   if (!current) return;
   for (const btn of $("choices").children) btn.disabled = true;
   conn.send({ type: "answer", questionIndex: current.questionIndex, choice });
+  const style = CHOICE_STYLES[choice];
+  $("s-choice").className = `picked ${style.className}`;
+  $("s-choice").textContent = style.shape;
+  navigator.vibrate?.(30); // 支援的手機給一點震動回饋
   show("submitted");
+}
+
+function renderResult(msg) {
+  clearInterval(timer);
+  const kind = !msg.answered ? "none" : msg.correct ? "correct" : "wrong";
+  $("result").className = `p-result is-${kind}`;
+  $("res-icon").textContent = { correct: "✓", wrong: "✕", none: "…" }[kind];
+  $("res-status").textContent = { correct: "答對了！", wrong: "答錯了", none: "這題沒有作答" }[kind];
+  $("res-points").textContent = msg.correct ? `+${msg.points}` : "+0";
+  $("res-total").textContent = msg.totalScore;
+  $("res-rank").textContent = `${msg.rank}／${msg.playerCount}`;
+  show("result");
 }
 
 function join(roomCode, nickname) {
@@ -92,6 +111,8 @@ function join(roomCode, nickname) {
           syncClock(msg.serverNow);
           writePlayerId(roomCode, msg.playerId);
           $("my-name").textContent = msg.nickname;
+          $("p-name").textContent = msg.nickname;
+          $("p-name").hidden = false;
           if (msg.phase === "question" && msg.question) renderQuestion(msg.question);
           else if (msg.phase === "lobby") show("waiting");
           break;
@@ -102,17 +123,10 @@ function join(roomCode, nickname) {
           renderQuestion(msg);
           break;
         case "answer_ack":
-          if (!msg.accepted && msg.reason === "late") {
-            $("status").textContent = "時間到，這次作答沒有送達";
-          }
+          if (!msg.accepted && msg.reason === "late") $("status").textContent = "時間到，這次作答沒有送達";
           break;
         case "your_result":
-          clearInterval(timer);
-          $("res-status").textContent = !msg.answered ? "沒有作答" : msg.correct ? "答對了！" : "答錯了";
-          $("res-points").textContent = msg.points;
-          $("res-total").textContent = msg.totalScore;
-          $("res-rank").textContent = `${msg.rank}／${msg.playerCount}`;
-          show("result");
+          renderResult(msg);
           break;
         case "game_end":
           clearInterval(timer);
