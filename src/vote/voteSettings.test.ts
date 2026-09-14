@@ -45,6 +45,17 @@ describe("voteSettings", () => {
     });
   });
 
+  it("預設就是正式的表單與統計網址，而且啟用線上投票", () => {
+    expect(DEFAULT_VOTE_SETTINGS.enabled).toBe(true);
+    expect(DEFAULT_VOTE_SETTINGS.formUrl).toContain("{round}");
+    expect(DEFAULT_VOTE_SETTINGS.statsUrl).toMatch(/^https:\/\/script\.google\.com\//);
+  });
+
+  it("舊版存下的空白網址（從來沒有設定過）會改用內建的正式設定", () => {
+    saveVoteSettings({ formUrl: "", statsUrl: "", intervalMs: 2000, enabled: false });
+    expect(loadVoteSettings()).toEqual(DEFAULT_VOTE_SETTINGS);
+  });
+
   it("localStorage 內容毀損時回傳預設值而不是丟出例外", () => {
     localStorage.setItem("quiz.vote.settings.v1", "{not-json");
     expect(loadVoteSettings()).toEqual(DEFAULT_VOTE_SETTINGS);

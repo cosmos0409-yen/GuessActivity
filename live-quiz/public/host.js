@@ -10,6 +10,9 @@ const HOST_KEY = "liveQuiz.host";
 const BANK_KEY = "liveQuiz.bank";
 const BANK_CACHE_KEY = "liveQuiz.bankCache";
 const SHEET_TIMEOUT_MS = 8000;
+// 決賽（闖關猜謎）的網址：「前往決賽」會帶上前 3 名的暱稱（?c=第1名&c=第2名&c=第3名），
+// 決賽大廳會把這 3 個名字顯示成按鈕，點一下就帶入挑戰者姓名。
+const FINALS_URL = "https://cosmos0409-yen.github.io/GuessActivity/";
 const URGENT_MS = 5000;
 const $ = (id) => document.getElementById(id);
 const SECTIONS = ["setup", "lobby", "question", "result", "final"];
@@ -28,6 +31,9 @@ let playersList = []; // 最新的完整名單（lobby_update），玩家名單�
 let pendingKick = null; // 等待確認要移出的玩家 { playerId, nickname }
 let flashTimer = null;
 let sheetQuestions = null; // 最近一次從試算表讀到、通過檢查的題目
+// 題目圖片預先載入：網址 → Promise<是否成功>。<img> 物件留在 preloadedImgs 裡，避免被回收後又要重新下載。
+const preloaded = new Map();
+const preloadedImgs = [];
 
 function show(section) {
   for (const id of SECTIONS) $(id).hidden = id !== section;
@@ -91,6 +97,52 @@ function readTakeoverHash() {
   if (!match) return null;
   history.replaceState(null, "", location.pathname + location.search);
   return { roomCode: match[1], hostToken: match[2] };
+}
+
+// ---------- 題目圖片預先載入 ----------
+// 主持人一拿到題庫（建立房間或重新連線）就在背景下載全部圖片，出題時圖片直接從瀏覽器快取顯示，
+// 不會發生「題目先出現、圖片晚一兩秒才跑出來」。等待室顯示載入結果，讀不到的圖片在開始前就會被發現。
+function preloadImages(list) {
+  const urls = [...new Set(list.map((q) => q.image).filter(Boolean))];
+  const box = $("img-status");
+  box.hidden = urls.length === 0;
+  if (!urls.length) return;
+
+  let loaded = 0;
+  const failed = [];
+  const update = () => {
+    const finished = loaded + failed.length === urls.length;
+    box.classList.toggle("bad", failed.length > 0);
+    box.classList.toggle("ok", finished && failed.length === 0);
+    if (failed.length) {
+      box.textContent = `⚠ ${failed.sort((a, b) => a - b).map((n) => `第 ${n} 題`).join("、")}的圖片讀不到，請檢查試算表的「圖片網址」`;
+    } else if (finished) {
+      box.textContent = `✓ 題目圖片 ${urls.length} 張都已預先載入`;
+    } else {
+      box.textContent = `題目圖片預先載入中…（${loaded}／${urls.length}）`;
+    }
+  };
+  update();
+
+  for (const url of urls) {
+    if (!preloaded.has(url)) {
+      const img = new Image();
+      preloaded.set(
+        url,
+        new Promise((resolve) => {
+          img.onload = () => resolve(true);
+          img.onerror = () => resolve(false);
+        }),
+      );
+      preloadedImgs.push(img);
+      img.src = url;
+    }
+    preloaded.get(url).then((ok) => {
+      if (ok) loaded++;
+      else list.forEach((q, i) => q.image === url && failed.push(i + 1));
+      update();
+    });
+  }
 }
 
 // ---------- 題庫（建立房間前） ----------
@@ -327,6 +379,10 @@ function renderResult(r) {
   const question = questions[r.questionIndex];
   $("r-number").textContent = r.questionIndex + 1;
   $("r-text").textContent = question.text;
+  // 圖片題：答案揭曉時也顯示圖片（已經在建立房間時預先載入，直接從快取顯示）
+  $("r-image").hidden = !question.image;
+  if (question.image) $("r-image").src = question.image;
+  else $("r-image").removeAttribute("src");
   const total = Math.max(1, r.answered);
   const fills = [];
   $("r-dist").replaceChildren(
@@ -392,6 +448,12 @@ function renderFinal(g) {
   $("final-list").replaceChildren(
     ...g.finalLeaderboard.slice(3).map((p) => el("li", "", `${p.rank}. ${p.nickname}　${p.score} 分（答對 ${p.correctCount} 題）`)),
   );
+  // 前往決賽：依名次帶上前 3 名的暱稱
+  const finalists = [...podium].sort((a, b) => a.rank - b.rank).map((p) => p.nickname);
+  $("to-finals").hidden = finalists.length === 0;
+  $("to-finals").dataset.url = finalists.length
+    ? `${FINALS_URL}?${finalists.map((n) => `c=${encodeURIComponent(n)}`).join("&")}`
+    : "";
   show("final");
   if (!reducedMotion) launchConfetti();
 }
@@ -433,6 +495,7 @@ function enterRoom({ roomCode, hostToken }) {
           syncClock(msg.serverNow);
           questions = msg.questions;
           totalQuestions = msg.totalQuestions;
+          preloadImages(questions);
           if (msg.phase === "lobby") show("lobby");
           if (msg.phase === "question" && msg.question) renderQuestion(msg.question);
           break;
@@ -537,6 +600,11 @@ $("takeover").addEventListener("click", async () => {
   } catch {
     flash("無法複製（瀏覽器不允許存取剪貼簿）");
   }
+});
+
+$("to-finals").addEventListener("click", () => {
+  const url = $("to-finals").dataset.url;
+  if (url) window.open(url, "_blank", "noopener");
 });
 
 $("new-room").addEventListener("click", () => {

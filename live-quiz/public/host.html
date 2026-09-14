@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>主持人｜司法官學院 全場搶答</title>
+  <title>主持人｜司法官學院千元小學堂－選拔賽</title>
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/host.css">
 </head>
@@ -11,7 +11,7 @@
   <header class="topbar">
     <img class="emblem" src="/brand/emblem.jpg" alt="司法官學院院徽" width="60" height="60">
     <div class="brand">
-      <strong>司法官學院 全場搶答</strong>
+      <strong>司法官學院千元小學堂－選拔賽</strong>
       <span>Academy for the Judiciary, Ministry of Justice</span>
     </div>
     <div class="topbar-right">
@@ -25,7 +25,7 @@
   <main class="stage">
     <section id="setup" class="setup">
       <img class="emblem" src="/brand/emblem.jpg" alt="" width="200" height="200">
-      <h1 class="title">全場搶答</h1>
+      <h1 class="title">千元小學堂－選拔賽</h1>
       <p class="muted">建立房間後，觀眾用手機掃描 QR code 加入</p>
       <fieldset class="bank-picker">
         <legend>題庫</legend>
@@ -62,6 +62,7 @@
           </div>
           <p class="muted">在線 <span id="online-count">0</span> 人</p>
           <button id="start" class="btn btn-xl">開始遊戲</button>
+          <p id="img-status" class="img-status" role="status" hidden></p>
         </div>
       </div>
       <p class="muted small wall-hint">點暱稱可以把不當暱稱移出房間</p>
@@ -91,10 +92,11 @@
         <div>
           <p class="q-label">第 <span id="r-number"></span> 題　答案揭曉</p>
           <h2 id="r-text" class="r-text"></h2>
+          <img id="r-image" class="r-image" alt="" hidden>
           <ol id="r-dist" class="tiles result-tiles"></ol>
         </div>
         <aside class="board">
-          <h3>目前前 5 名</h3>
+          <h3>目前前 10 名</h3>
           <ol id="r-leaderboard" class="leaderboard"></ol>
         </aside>
       </div>
@@ -106,7 +108,10 @@
       <div id="podium" class="podium"></div>
       <ol id="final-list" class="final-list"></ol>
       <div id="confetti" class="confetti" aria-hidden="true"></div>
-      <div class="controls"><button id="new-room" class="btn btn-ghost" type="button">建立新房間</button></div>
+      <div class="controls">
+        <button id="new-room" class="btn btn-ghost" type="button">建立新房間</button>
+        <button id="to-finals" class="btn btn-xl" type="button" hidden>前往決賽 →</button>
+      </div>
     </section>
 
     <dialog id="players-dialog" class="dialog dialog-wide" aria-labelledby="players-title">

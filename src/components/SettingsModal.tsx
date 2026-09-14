@@ -141,7 +141,7 @@ export default function SettingsModal({
           <h3>基本</h3>
           <label>
             主標題
-            <input value={titleValue} onChange={(e) => setTitleValue(e.target.value)} placeholder="司法官學院 闖關大挑戰" />
+            <input value={titleValue} onChange={(e) => setTitleValue(e.target.value)} placeholder="司法官學院千元小學堂－決賽" />
           </label>
         </section>
 

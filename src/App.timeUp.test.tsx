@@ -26,7 +26,7 @@ beforeEach(() => {
     "fetch",
     vi.fn(async (input: unknown) => {
       const url = String(input);
-      const text = url.includes("categories") ? categoriesCsv : questionsCsv;
+      const text = url.includes("categories") || url.includes("gid=471665721") ? categoriesCsv : questionsCsv;
       return {
         ok: true,
         status: 200,

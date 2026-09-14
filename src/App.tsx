@@ -37,7 +37,8 @@ import OptionGrid from "./components/OptionGrid";
 import CountdownRing from "./components/CountdownRing";
 import LifelineDock from "./components/LifelineDock";
 import PhoneAFriend from "./components/PhoneAFriend";
-import AudiencePoll from "./components/AudiencePoll";
+import AudiencePoll, { PollChip } from "./components/AudiencePoll";
+import { parseFinalists } from "./app/finalists";
 import ExplanationCard from "./components/ExplanationCard";
 import ResultOverlay from "./components/ResultOverlay";
 import HostBar, { type HostBarAction } from "./components/HostBar";
@@ -49,11 +50,14 @@ import { assetUrl } from "./utils/baseUrl";
 
 const EMBLEM_SRC = assetUrl("brand/emblem.jpg");
 const TITLE_KEY = "quiz.settings.title";
-const DEFAULT_TITLE = "司法官學院 闖關大挑戰";
+const DEFAULT_TITLE = "司法官學院千元小學堂－決賽";
+// 舊版的預設標題：瀏覽器裡存的如果還是它（主持人沒有自己改過），就換成新的預設標題
+const LEGACY_DEFAULT_TITLE = "司法官學院 闖關大挑戰";
 
 function loadTitle(): string {
   try {
-    return localStorage.getItem(TITLE_KEY) || DEFAULT_TITLE;
+    const saved = localStorage.getItem(TITLE_KEY);
+    return saved && saved !== LEGACY_DEFAULT_TITLE ? saved : DEFAULT_TITLE;
   } catch {
     return DEFAULT_TITLE;
   }
@@ -87,6 +91,8 @@ export default function App() {
   const [ruleSettings, setRuleSettings] = useState<RuleSettings>(() => loadRuleSettings());
   const [title, setTitle] = useState(() => loadTitle());
   const [records, setRecords] = useState(() => loadRecords());
+  // 選拔賽「前往決賽」帶過來的前 3 名（網址 ?c=名字&c=名字&c=名字）
+  const [finalists] = useState(() => parseFinalists(window.location.search));
 
   const [state, dispatch] = useReducer(appReducer, undefined, () => initialState(ruleSettings));
   const sessionIdRef = useRef<string>(makeSessionId());
@@ -167,6 +173,8 @@ export default function App() {
     D: "0",
   });
   const [qrDataUrl, setQrDataUrl] = useState<string | undefined>(undefined);
+  // 投票彈窗是否收起（收起後在右側欄顯示小視窗，票照收）
+  const [pollMinimized, setPollMinimized] = useState(false);
   const [pollErrorNotice, setPollErrorNotice] = useState(false);
 
   const pollCountdown = useCountdown({
@@ -218,6 +226,7 @@ export default function App() {
     if (state.phase === "lifeline" && state.lifelineSub === "poll" && state.question) {
       const roundId = makeRoundId(sessionIdRef.current, state.level, state.question.id);
       setPollErrorNotice(false);
+      setPollMinimized(false);
       setPollManualValues({ A: "0", B: "0", C: "0", D: "0" });
       pollCountdown.reset(state.config.pollSeconds);
       pollCountdown.start();
@@ -579,6 +588,8 @@ export default function App() {
           onStart={handleStartGame}
           onOpenSettings={() => setSettingsOpen(true)}
           onOpenLeaderboard={() => setLeaderboardOpen(true)}
+          finalists={finalists}
+          playedNames={state.records.map((record) => record.contestantName)}
         />
         {settingsOpen && (
           <SettingsModal
@@ -656,18 +667,6 @@ export default function App() {
           <div className="tpi-play">
             <div className="tpi-play__main">
               <QuestionCard question={state.question} level={state.level} />
-              {isPollActive && (
-                <AudiencePoll
-                  qrDataUrl={qrDataUrl}
-                  snapshot={pollSnapshot}
-                  remainingSeconds={Math.ceil(pollCountdown.remainingMs / 1000)}
-                  onFinishEarly={finishPoll}
-                  manualMode={pollManualMode}
-                  onToggleManual={handleToggleManual}
-                  manualValues={pollManualValues}
-                  onManualChange={handleManualChange}
-                />
-              )}
               {pollErrorNotice && !isPollActive && (
                 <p className="tpi-poll__error">上一次線上投票連線異常，已自動切換為手動輸入。</p>
               )}
@@ -681,6 +680,7 @@ export default function App() {
                   correct={state.correct}
                   selectable={state.phase === "counting" || state.phase === "answering"}
                   onSelect={handleSelect}
+                  pollPercents={state.pollResult}
                 />
               )}
             </div>
@@ -712,6 +712,33 @@ export default function App() {
       </Stage>
 
       {isPhoneOverlay && <PhoneAFriend onEnd={() => dispatch({ type: "END_LIFELINE" })} />}
+
+      {/* 全場一起協助：彈窗（不在題目欄裡插入面板，避免小螢幕把題目擠掉）；收起後改成右側欄的小視窗 */}
+      {isPollActive && state.question && !pollMinimized && (
+        <AudiencePoll
+          qrDataUrl={qrDataUrl}
+          snapshot={pollSnapshot}
+          remainingSeconds={Math.ceil(pollCountdown.remainingMs / 1000)}
+          onFinishEarly={finishPoll}
+          manualMode={pollManualMode}
+          onToggleManual={handleToggleManual}
+          manualValues={pollManualValues}
+          onManualChange={handleManualChange}
+          questionText={state.question.text}
+          optionTexts={state.question.options}
+          removedOption={state.removedOption}
+          onMinimize={() => setPollMinimized(true)}
+        />
+      )}
+      {isPollActive && pollMinimized && (
+        <PollChip
+          remainingSeconds={Math.ceil(pollCountdown.remainingMs / 1000)}
+          total={pollSnapshot.total}
+          manualMode={pollManualMode}
+          onExpand={() => setPollMinimized(false)}
+          onFinishEarly={finishPoll}
+        />
+      )}
 
       {timeUpNotice && (
         <div className="tpi-timeup" role="alert">

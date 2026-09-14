@@ -31,6 +31,15 @@ export const STORAGE_KEYS = {
   cachedFetchedAt: "quiz.cache.fetchedAt",
 } as const;
 
+// 正式題庫（「法官學院測驗表」發布成 CSV）直接寫在程式裡（使用者 2026-09-14 同意）：
+// 換任何一台電腦打開都能直接讀到，設定頁填的網址仍然優先。
+export const DEFAULT_REMOTE_URLS = {
+  questionsUrl:
+    "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDMOTLgvahrEnSwzReVTj9CEbwKDgXjrAZ3Tu7h8mFLWTJlQr4gwfTOJjwLfSgFjbEhEeUxunp3viH/pub?gid=0&single=true&output=csv",
+  categoriesUrl:
+    "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDMOTLgvahrEnSwzReVTj9CEbwKDgXjrAZ3Tu7h8mFLWTJlQr4gwfTOJjwLfSgFjbEhEeUxunp3viH/pub?gid=471665721&single=true&output=csv",
+} as const;
+
 const BUNDLED_QUESTIONS_URL = assetUrl("sample-questions.csv");
 const BUNDLED_CATEGORIES_URL = assetUrl("sample-categories.csv");
 
@@ -269,8 +278,7 @@ export interface LoadQuestionBankOptions {
 export async function loadQuestionBank(options: LoadQuestionBankOptions = {}): Promise<QuestionBank> {
   const timeoutMs = options.timeoutMs ?? FETCH_TIMEOUT_MS;
 
-  const questionsUrl = safeGetItem(STORAGE_KEYS.questionsUrl);
-  const categoriesUrl = safeGetItem(STORAGE_KEYS.categoriesUrl);
+  const { questionsUrl, categoriesUrl } = getRemoteUrls();
 
   // 1. 嘗試遠端
   if (questionsUrl && categoriesUrl) {
@@ -314,9 +322,10 @@ export function setRemoteUrls(questionsUrl: string, categoriesUrl: string): void
   safeSetItem(STORAGE_KEYS.categoriesUrl, categoriesUrl);
 }
 
-export function getRemoteUrls(): { questionsUrl: string | null; categoriesUrl: string | null } {
+/** 設定頁填過的網址優先；沒填過（或是空白）就用內建的正式題庫網址 */
+export function getRemoteUrls(): { questionsUrl: string; categoriesUrl: string } {
   return {
-    questionsUrl: safeGetItem(STORAGE_KEYS.questionsUrl),
-    categoriesUrl: safeGetItem(STORAGE_KEYS.categoriesUrl),
+    questionsUrl: safeGetItem(STORAGE_KEYS.questionsUrl) || DEFAULT_REMOTE_URLS.questionsUrl,
+    categoriesUrl: safeGetItem(STORAGE_KEYS.categoriesUrl) || DEFAULT_REMOTE_URLS.categoriesUrl,
   };
 }

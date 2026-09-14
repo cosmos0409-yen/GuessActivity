@@ -14,6 +14,8 @@ export interface OptionGridProps {
   /** 可以點選（例如 counting / answering 階段），揭曉或鎖定後一律不可點選 */
   selectable: boolean;
   onSelect: (option: OptionKey) => void;
+  /** 全場一起協助的收票結果（百分比）：有值時顯示在每個選項上，直到換下一題 */
+  pollPercents?: Record<OptionKey, number>;
 }
 
 /** 2x2 選項；四色對應 A綠 B紅 C藍 D金；狀態：選取/鎖定(脈動)/刪除(淡出+刪除線)/正確(金光+勾+彈跳)/錯誤(灰階+叉+搖晃) */
@@ -26,6 +28,7 @@ export default function OptionGrid({
   correct,
   selectable,
   onSelect,
+  pollPercents,
 }: OptionGridProps) {
   return (
     <div className="tpi-options" role="group" aria-label="選項">
@@ -63,6 +66,14 @@ export default function OptionGrid({
           >
             <span className="tpi-option__letter">{key}</span>
             <span className="tpi-option__text">{question.options[key]}</span>
+            {pollPercents && !isRemoved && (
+              <span className="tpi-option__poll" title="全場投票結果">
+                <span className="tpi-option__poll-track" aria-hidden="true">
+                  <span className="tpi-option__poll-fill" style={{ width: `${pollPercents[key]}%` }} />
+                </span>
+                <span className="tpi-option__poll-pct">{pollPercents[key]}%</span>
+              </span>
+            )}
             {badge && (
               <span className="tpi-option__badge" aria-hidden="true">
                 {badge}

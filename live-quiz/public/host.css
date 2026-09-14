@@ -100,6 +100,10 @@
 .count-num.bump { animation: bump 0.35s ease; }
 .count-unit { font-size: clamp(1.2rem, 2vw, 2.2rem); }
 .lobby-info .btn-xl { margin-top: 1.2rem; }
+/* 題目圖片預先載入的狀態：只寫題號，不寫檔名（等待室會投影出來） */
+.img-status { margin: 0.8rem 0 0; font-size: clamp(0.9rem, 1.1vw, 1.2rem); opacity: 0.85; }
+.img-status.ok { color: #9ff0bc; }
+.img-status.bad { color: #ffb3b3; opacity: 1; font-weight: 700; }
 .name-wall {
   list-style: none;
   padding: 0;
@@ -271,6 +275,17 @@
 .leaderboard li:nth-child(3) { animation-delay: 0.2s; }
 .leaderboard li:nth-child(4) { animation-delay: 0.3s; }
 .leaderboard li:nth-child(5) { animation-delay: 0.4s; }
+.leaderboard li:nth-child(6) { animation-delay: 0.5s; }
+.leaderboard li:nth-child(7) { animation-delay: 0.6s; }
+.leaderboard li:nth-child(8) { animation-delay: 0.7s; }
+.leaderboard li:nth-child(9) { animation-delay: 0.8s; }
+.leaderboard li:nth-child(10) { animation-delay: 0.9s; }
+/* 前 10 名：列高與字級收小一點，1366×768 的投影機也放得下 */
+#r-leaderboard { gap: 0.35rem; }
+#r-leaderboard li { padding: 0.3rem 0.7rem; font-size: clamp(1rem, 1.35vw, 1.6rem); }
+#r-leaderboard li:nth-child(n + 4) .rank-badge { background: rgba(255, 255, 255, 0.08); }
+.board h3 { margin-bottom: 0.6rem; }
+.r-image { display: block; max-height: 22vh; max-width: 100%; border-radius: var(--radius-md); margin: 0 0 1rem; }
 .rank-badge { display: grid; place-content: center; aspect-ratio: 1; border-radius: 50%; background: rgba(255, 255, 255, 0.14); font-weight: 900; }
 .leaderboard li:first-child .rank-badge { background: var(--gold); color: var(--ink); }
 .lb-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -334,3 +349,15 @@
   .result-grid { grid-template-columns: 1fr; }
   .q-main { grid-template-columns: 1fr; justify-items: center; }
 }
+
+/* 投影機比較矮（例如 1366×768）時，前 10 名改成左右兩欄（1–5、6–10），「下一題」按鈕才不會被擠出畫面 */
+@media (max-height: 900px) {
+  #r-leaderboard { grid-template-columns: 1fr 1fr; grid-auto-flow: column; grid-template-rows: repeat(5, auto); column-gap: 0.5rem; }
+  #r-leaderboard li { grid-template-columns: 1.8em minmax(0, 1fr) auto; font-size: clamp(0.95rem, 1.2vw, 1.4rem); }
+  #r-leaderboard .lb-move { display: none; }
+}
+
+/* 最終排名：頒獎台加上第 4–10 名會佔滿畫面高度。按鈕放在「最終排名」標題同一列的右側（標題置中、右邊是空的），
+   不用捲動就按得到「前往決賽」，也不會蓋到頒獎台（固定在右下角時，1366×768 會蓋到第 3 名的柱子） */
+#final { position: relative; }
+#final .controls { position: absolute; top: 0; right: 0; z-index: 25; margin: 0; }

@@ -773,6 +773,189 @@ button:disabled {
 /* AudiencePoll                                                        */
 /* ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ */
+/* 全場一起協助：彈窗、收起後的小視窗、選項上的百分比（2026-09-14）      */
+/* 彈窗不插在題目欄裡：1366×768 時原本的面板會把題目文字擠掉            */
+/* ------------------------------------------------------------------ */
+.tpi-poll-modal {
+  position: fixed;
+  inset: 0 0 var(--tpi-hostbar-h) 0; /* 保留 HostBar，主持人仍然可以操作 */
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(12px, 2vw, 32px);
+  background: rgba(8, 9, 28, 0.9);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+.tpi-poll-modal__card {
+  width: min(1500px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(10px, 1.8vh, 22px);
+  padding: clamp(16px, 2.4vw, 36px);
+  border-radius: 24px;
+  background: rgba(20, 22, 56, 0.96);
+  border: 1px solid rgba(255, 248, 232, 0.18);
+  box-shadow: var(--tpi-shadow-raised);
+  color: #fff8e8;
+}
+.tpi-poll-modal__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.tpi-poll-modal__question {
+  margin: 0;
+  font-family: var(--tpi-font-heading);
+  font-size: clamp(20px, 2.2vw, 40px);
+  line-height: 1.35;
+}
+.tpi-poll-modal__body {
+  display: flex;
+  align-items: center;
+  gap: clamp(16px, 3vw, 48px);
+}
+.tpi-poll-modal .tpi-poll__qr img {
+  width: clamp(200px, 22vw, 400px);
+  height: auto;
+  aspect-ratio: 1;
+}
+.tpi-poll-modal .tpi-poll__qr span {
+  font-size: clamp(16px, 1.4vw, 24px);
+  font-weight: 700;
+}
+.tpi-poll-modal .tpi-poll__bar-row {
+  font-size: clamp(16px, 1.5vw, 28px);
+}
+.tpi-poll-modal .tpi-poll__bar-track {
+  height: clamp(22px, 3.2vh, 40px);
+}
+.tpi-poll__bar-text {
+  width: clamp(120px, 22%, 360px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tpi-poll__bar-row--removed {
+  opacity: 0.35;
+  text-decoration: line-through;
+}
+.tpi-poll-modal .tpi-poll__controls {
+  justify-content: flex-end;
+}
+.tpi-poll__status {
+  font-weight: 700;
+  margin-right: auto;
+}
+
+/* 收起後：放在右側欄的寬度裡、HostBar 上方，不蓋住題目與選項 */
+.tpi-poll-chip {
+  position: fixed;
+  right: clamp(12px, 2.5vw, 48px);
+  bottom: calc(var(--tpi-hostbar-h) + 12px);
+  z-index: 45;
+  width: clamp(180px, 15vw, 230px);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(20, 22, 56, 0.97);
+  border: 2px solid var(--tpi-gold);
+  box-shadow: var(--tpi-shadow-raised);
+  color: #fff8e8;
+  font-size: clamp(13px, 1vw, 17px);
+}
+.tpi-poll-chip__actions {
+  display: flex;
+  gap: 6px;
+}
+.tpi-poll-chip__actions .tpi-btn {
+  flex: 1;
+  padding: 6px 8px;
+  font-size: inherit;
+}
+
+/* 收票後的百分比：每個選項右側一條小長條＋數字，留到換下一題 */
+.tpi-option__poll {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  width: clamp(90px, 10vw, 180px);
+}
+.tpi-option__poll-track {
+  flex: 1;
+  height: clamp(8px, 1.1vh, 14px);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.28);
+  overflow: hidden;
+}
+.tpi-option__poll-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: #fff;
+  transition: width 0.6s ease;
+}
+.tpi-option--D .tpi-option__poll-fill {
+  background: #201a08;
+}
+.tpi-option__poll-pct {
+  min-width: 3ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 決賽大廳：選拔賽帶過來的前 3 名 */
+.tpi-lobby__finalists {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.tpi-lobby__finalists-label {
+  width: 100%;
+  text-align: center;
+  opacity: 0.8;
+}
+.tpi-finalist {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: 2px solid var(--tpi-gold);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff8e8;
+  font-size: clamp(16px, 1.4vw, 24px);
+  font-weight: 700;
+  cursor: pointer;
+}
+.tpi-finalist--active {
+  background: var(--tpi-gold);
+  color: #201a08;
+}
+.tpi-finalist--played {
+  opacity: 0.6;
+}
+.tpi-finalist__rank {
+  font-size: 0.75em;
+  opacity: 0.8;
+}
+.tpi-finalist__played {
+  font-size: 0.7em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.3);
+}
+
 .tpi-poll {
   display: flex;
   gap: clamp(20px, 3vw, 48px);
