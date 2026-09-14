@@ -1,6 +1,7 @@
 {
   "name": "live-quiz",
   "private": true,
+  "type": "module",
   "description": "司法官學院 全場搶答（Kahoot 式）— Cloudflare Workers + SQLite-backed Durable Objects",
   "scripts": {
     "dev": "wrangler dev",

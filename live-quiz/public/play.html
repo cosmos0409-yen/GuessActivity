@@ -2,11 +2,11 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
   <title>加入搶答</title>
   <link rel="stylesheet" href="/style.css">
 </head>
-<body>
+<body class="player">
   <main class="center">
     <form id="join-form" class="stack">
       <h1>加入搶答</h1>
@@ -22,11 +22,41 @@
 
     <section id="waiting" hidden>
       <p class="muted">你的暱稱</p>
-      <p id="my-name" class="room-code"></p>
+      <p id="my-name" class="room-code small"></p>
       <p>等待主持人開始…</p>
       <p class="muted">目前 <span id="count">0</span> 人已加入</p>
-      <p id="status" class="muted" role="status"></p>
     </section>
+
+    <section id="question" hidden>
+      <p class="muted">第 <span id="q-number"></span> 題　・　剩 <strong id="q-seconds"></strong> 秒</p>
+      <p class="muted small-note">題目請看投影幕</p>
+      <div id="choices" class="choice-grid player"></div>
+    </section>
+
+    <section id="submitted" hidden>
+      <p class="big-status">已送出！</p>
+      <p>剩 <strong id="s-seconds"></strong> 秒，等待公布答案…</p>
+    </section>
+
+    <section id="result" hidden>
+      <p id="res-status" class="big-status"></p>
+      <p>本題得分 <strong id="res-points"></strong></p>
+      <p>總分 <strong id="res-total"></strong>　・　目前第 <strong id="res-rank"></strong> 名</p>
+      <p class="muted">等待下一題…</p>
+    </section>
+
+    <section id="final" hidden>
+      <p class="muted">最終名次</p>
+      <p id="fin-rank" class="room-code"></p>
+      <p>總分 <strong id="fin-score"></strong></p>
+      <div id="fin-podium" class="verify" hidden>
+        <p>恭喜進入前 3 名！上台時請出示這個畫面</p>
+        <p class="muted">驗證碼</p>
+        <p id="fin-code" class="room-code"></p>
+      </div>
+    </section>
+
+    <p id="status" class="muted" role="status"></p>
   </main>
   <script type="module" src="/play.js"></script>
 </body>

@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <main class="center">
+  <main class="center wide">
     <section id="setup">
       <h1>主持人</h1>
       <button id="create" class="btn">建立房間</button>
@@ -27,9 +27,35 @@
         </div>
       </div>
       <p><strong id="player-count">0</strong> 人已加入（<span id="online-count">0</span> 人在線上）</p>
+      <button id="start" class="btn">開始遊戲</button>
       <ul id="players" class="player-list" aria-live="polite"></ul>
-      <p id="status" class="muted"></p>
     </section>
+
+    <section id="question" hidden>
+      <p class="muted">第 <span id="q-number"></span> 題／共 <span id="q-total"></span> 題</p>
+      <h2 id="q-text" class="q-text"></h2>
+      <div class="timer" aria-hidden="true"><div id="q-bar" class="timer-bar"></div></div>
+      <p class="timer-text"><span id="q-seconds"></span> 秒　・　已作答 <strong id="q-answered">0</strong> / <span id="q-online">0</span></p>
+      <ol id="q-choices" class="choice-grid host"></ol>
+      <button id="end-question" class="btn btn-secondary">提前結束這一題</button>
+    </section>
+
+    <section id="result" hidden>
+      <p class="muted">第 <span id="r-number"></span> 題結果</p>
+      <h2 id="r-text" class="q-text"></h2>
+      <ol id="r-dist" class="dist"></ol>
+      <h3>目前前 5 名</h3>
+      <ol id="r-leaderboard" class="leaderboard"></ol>
+      <button id="next" class="btn">下一題</button>
+    </section>
+
+    <section id="final" hidden>
+      <h2>最終排名</h2>
+      <ol id="podium" class="podium"></ol>
+      <ol id="final-list" class="leaderboard"></ol>
+    </section>
+
+    <p id="status" class="muted" role="status"></p>
   </main>
   <script type="module" src="/host.js"></script>
 </body>
