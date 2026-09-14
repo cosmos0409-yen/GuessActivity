@@ -15,9 +15,17 @@
     </section>
 
     <section id="lobby" hidden>
-      <p class="muted">加入網址：<span id="join-url"></span></p>
-      <p class="muted">房間碼</p>
-      <p id="room-code" class="room-code"></p>
+      <div class="join-panel">
+        <figure class="qr-box">
+          <div id="qr" role="img" aria-label="加入搶答的 QR code"></div>
+          <figcaption>手機掃描加入</figcaption>
+        </figure>
+        <div>
+          <p class="muted">房間碼</p>
+          <p id="room-code" class="room-code"></p>
+          <p class="muted">或開啟：<span id="join-url" class="join-url"></span></p>
+        </div>
+      </div>
       <p><strong id="player-count">0</strong> 人已加入（<span id="online-count">0</span> 人在線上）</p>
       <ul id="players" class="player-list" aria-live="polite"></ul>
       <p id="status" class="muted"></p>

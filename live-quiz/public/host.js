@@ -1,4 +1,13 @@
 import { connectRoom } from "/shared/ws-client.js";
+// QR code 在瀏覽器裡直接產生，不呼叫任何外部 API（qrcode-generator，MIT 授權，檔案放在 public/shared/）
+import qrcode from "/shared/qrcode.mjs";
+
+function renderJoinQr(url) {
+  const qr = qrcode(0, "M"); // 0 = 依內容長度自動選版本；M = 約 15% 容錯，投影反光時也掃得到
+  qr.addData(url);
+  qr.make();
+  $("qr").innerHTML = qr.createSvgTag({ cellSize: 8, margin: 2, scalable: true });
+}
 
 const HOST_KEY = "liveQuiz.host";
 const $ = (id) => document.getElementById(id);
@@ -24,7 +33,9 @@ function enterLobby({ roomCode, hostToken }) {
   $("setup").hidden = true;
   $("lobby").hidden = false;
   $("room-code").textContent = roomCode;
-  $("join-url").textContent = `${location.origin}/play.html?room=${roomCode}`;
+  const joinUrl = `${location.origin}/play.html?room=${roomCode}`;
+  $("join-url").textContent = joinUrl;
+  renderJoinQr(joinUrl);
 
   const conn = connectRoom(roomCode, {
     onOpen: () => conn.send({ type: "join", role: "host", roomCode, hostToken }),
