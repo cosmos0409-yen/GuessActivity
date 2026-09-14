@@ -58,11 +58,29 @@ async function bootToCategoryPicker() {
   await screen.findByLabelText("選擇題型");
 }
 
+/**
+ * 從內建題庫找出某題型、某難度所有「上架」題目的 id。
+ * 題數會隨題庫擴充而變（2026-09-14 從每格 1 題擴充到 3 題），所以測試不能寫死題數。
+ * 每列前 4 欄（id、領域、題型、難度）沒有逗號或引號，可以直接切開。
+ */
+function onShelfIds(categoryName: string, difficulty: number): string[] {
+  return questionsCsv
+    .replace(/^﻿/, "")
+    .split(/\r?\n/)
+    .slice(1)
+    .filter((line) => {
+      const [id, , category, level] = line.split(",");
+      return Boolean(id) && category?.includes(categoryName) && Number(level) === difficulty && !line.endsWith(",待審");
+    })
+    .map((line) => line.split(",")[0]);
+}
+
 describe("選題型：跨場次已用題目要正確算進剩餘題數", () => {
-  it("這一場還沒選過、但題目已經在別場用掉的題型，剩餘題數要顯示 0 且按鈕停用", async () => {
-    // L06 是「憲法法庭與實務」難度 1 唯一的題目（見 public/sample-questions.csv），
-    // 直接模擬「上一場已經用過」：寫進 usedStore 用的 localStorage key。
-    localStorage.setItem("quiz.used.ids", JSON.stringify(["L06"]));
+  it("這一場還沒選過、但題目已經在別場全部用掉的題型，剩餘題數要顯示 0 且按鈕停用", async () => {
+    // 模擬「上一場已經把『憲法法庭與實務』難度 1 的題目全部用完」：寫進 usedStore 用的 localStorage key。
+    const usedUp = onShelfIds("憲法法庭與實務", 1);
+    expect(usedUp.length).toBeGreaterThan(0);
+    localStorage.setItem("quiz.used.ids", JSON.stringify(usedUp));
 
     await bootToCategoryPicker();
 
@@ -73,15 +91,17 @@ describe("選題型：跨場次已用題目要正確算進剩餘題數", () => {
     expect(button.disabled).toBe(true);
   });
 
-  it("這一場也沒選過、題目也還沒用掉的題型，剩餘題數維持 1、按鈕可以點", async () => {
-    localStorage.setItem("quiz.used.ids", JSON.stringify(["L06"]));
+  it("這一場也沒選過、題目也還沒用掉的題型，剩餘題數等於它的上架題數、按鈕可以點", async () => {
+    localStorage.setItem("quiz.used.ids", JSON.stringify(onShelfIds("憲法法庭與實務", 1)));
 
     await bootToCategoryPicker();
 
+    const expected = onShelfIds("比較法大觀園", 1).length;
+    expect(expected).toBeGreaterThan(0);
     const otherButton = (await screen.findByRole("button", {
       name: /比較法大觀園，難度 1，剩餘 \d+ 題/,
     })) as HTMLButtonElement;
-    expect(otherButton.getAttribute("aria-label")).toMatch(/剩餘 1 題/);
+    expect(otherButton.getAttribute("aria-label")).toMatch(new RegExp(`剩餘 ${expected} 題`));
     expect(otherButton.disabled).toBe(false);
   });
 });
