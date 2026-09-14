@@ -32,6 +32,9 @@
 .sec-pill.urgent { background: var(--red); }
 .hint { margin: 0; font-size: 0.9rem; opacity: 0.75; text-align: center; }
 .p-grid { flex: 1; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 0.6rem; min-height: 0; }
+/* 2 選 1：上下兩大塊；3 選 1：第三個選項佔滿最後一列 */
+.p-grid[data-count="2"] { grid-template-columns: 1fr; }
+.p-grid[data-count="3"] .p-choice:last-child { grid-column: 1 / -1; }
 .p-choice {
   border: 0;
   border-radius: var(--radius-md);

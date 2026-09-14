@@ -3,8 +3,13 @@ import { syncClock, remainingMs } from "/shared/time-sync.js";
 import { CHOICE_STYLES } from "/shared/choices.js";
 // QR code 在瀏覽器裡直接產生，不呼叫任何外部 API（qrcode-generator，MIT 授權，檔案放在 public/shared/）
 import qrcode from "/shared/qrcode.mjs";
+import { parseQuestionCsv } from "/shared/question-csv.js";
 
 const HOST_KEY = "liveQuiz.host";
+// 題庫設定：選哪一種、試算表網址；另外存一份最後一次讀成功的 CSV，現場讀不到試算表時拿來用
+const BANK_KEY = "liveQuiz.bank";
+const BANK_CACHE_KEY = "liveQuiz.bankCache";
+const SHEET_TIMEOUT_MS = 8000;
 const URGENT_MS = 5000;
 const $ = (id) => document.getElementById(id);
 const SECTIONS = ["setup", "lobby", "question", "result", "final"];
@@ -22,6 +27,7 @@ let currentRoom = null; // { roomCode, hostToken }
 let playersList = []; // 最新的完整名單（lobby_update），玩家名單對話框用
 let pendingKick = null; // 等待確認要移出的玩家 { playerId, nickname }
 let flashTimer = null;
+let sheetQuestions = null; // 最近一次從試算表讀到、通過檢查的題目
 
 function show(section) {
   for (const id of SECTIONS) $(id).hidden = id !== section;
@@ -85,6 +91,104 @@ function readTakeoverHash() {
   if (!match) return null;
   history.replaceState(null, "", location.pathname + location.search);
   return { roomCode: match[1], hostToken: match[2] };
+}
+
+// ---------- 題庫（建立房間前） ----------
+function readJson(key) {
+  try {
+    return JSON.parse(localStorage.getItem(key) || "null");
+  } catch {
+    return null;
+  }
+}
+
+function writeJson(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    /* 存不進去就只是下次要重新讀取 */
+  }
+}
+
+function bankMode() {
+  return document.querySelector('input[name="bank"]:checked').value;
+}
+
+function setBankStatus(text, kind = "") {
+  $("bank-status").textContent = text;
+  $("bank-status").className = `small ${kind}`;
+}
+
+function saveBankSettings() {
+  writeJson(BANK_KEY, { mode: bankMode(), url: $("sheet-url").value.trim() });
+}
+
+// 讀取試算表：先試網路（8 秒逾時）；失敗就用這台電腦上次存下的同一個網址的內容。
+// 預覽只列題目與秒數，不列正解（這個畫面可能已經投影出來）。
+async function loadSheet() {
+  const url = $("sheet-url").value.trim();
+  sheetQuestions = null;
+  $("bank-warnings").replaceChildren();
+  $("bank-preview").replaceChildren();
+  if (!/^https:\/\//i.test(url)) {
+    setBankStatus("請貼上 https:// 開頭的 CSV 網址", "bad");
+    return null;
+  }
+  saveBankSettings();
+  setBankStatus("讀取中…");
+  $("load-sheet").disabled = true;
+
+  let csv = null;
+  let note = "";
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SHEET_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { cache: "no-store", signal: controller.signal });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    csv = await res.text();
+    if (/^\s*<!doctype html|^\s*<html/i.test(csv)) throw new Error("拿到的是網頁，不是 CSV（發布格式要選「逗號分隔值檔案」）");
+    writeJson(BANK_CACHE_KEY, { url, csv, fetchedAt: Date.now() });
+  } catch (err) {
+    const cache = readJson(BANK_CACHE_KEY);
+    if (cache?.url === url && cache.csv) {
+      csv = cache.csv;
+      note = `（讀不到試算表：${err.name === "AbortError" ? "逾時" : err.message}；改用這台電腦 ${new Date(cache.fetchedAt).toLocaleString("zh-TW")} 存下的版本）`;
+    } else {
+      setBankStatus(`讀不到試算表：${err.name === "AbortError" ? "超過 8 秒沒有回應" : err.message}`, "bad");
+      return null;
+    }
+  } finally {
+    clearTimeout(timer);
+    $("load-sheet").disabled = false;
+  }
+
+  const { questions, warnings } = parseQuestionCsv(csv);
+  $("bank-warnings").replaceChildren(
+    ...warnings.map((w) => el("li", "", w.row ? `第 ${w.row} 列：${w.reason}` : w.reason)),
+  );
+  $("bank-preview").replaceChildren(
+    ...questions.map((q) => {
+      const item = el("li", "", q.text);
+      item.append(el("span", "meta", `${q.choices.length} 選 1・${q.timeLimit} 秒${q.image ? "・有圖片" : ""}`));
+      return item;
+    }),
+  );
+  if (!questions.length) {
+    setBankStatus(`沒有可以出的題目${note}`, "bad");
+    return null;
+  }
+  sheetQuestions = questions;
+  const skipped = warnings.filter((w) => w.row > 1).length;
+  setBankStatus(
+    `讀到 ${questions.length} 題${skipped ? `，跳過 ${skipped} 列（原因見下方）` : ""}${note}`,
+    note || warnings.length ? "warn" : "ok",
+  );
+  return questions;
+}
+
+function updateBankUi() {
+  $("sheet-box").hidden = bankMode() !== "sheet";
+  saveBankSettings();
 }
 
 function tile(i, text) {
@@ -374,9 +478,16 @@ $("create").addEventListener("click", async () => {
   $("create").disabled = true;
   $("setup-error").textContent = "";
   try {
-    const res = await fetch("/api/rooms", { method: "POST" });
+    let body;
+    if (bankMode() === "sheet") {
+      // 還沒按「讀取」就直接建立房間：先讀一次；讀不到就不建立，避免主持人以為用的是試算表題庫
+      const questions = sheetQuestions ?? (await loadSheet());
+      if (!questions) throw new Error("試算表題庫還沒讀好，請先確認上方的訊息");
+      body = JSON.stringify({ questions });
+    }
+    const res = await fetch("/api/rooms", { method: "POST", body, headers: body ? { "content-type": "application/json" } : {} });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "建立房間失敗");
+    if (!res.ok) throw new Error([data.error || "建立房間失敗", ...(data.errors ?? [])].join("\n"));
     saveHost(data);
     enterRoom(data);
   } catch (err) {
@@ -446,6 +557,17 @@ $("new-room").addEventListener("click", () => {
   $("confetti").replaceChildren();
   show("setup");
 });
+
+for (const radio of document.querySelectorAll('input[name="bank"]')) radio.addEventListener("change", updateBankUi);
+$("load-sheet").addEventListener("click", loadSheet);
+$("sheet-url").addEventListener("change", () => {
+  sheetQuestions = null;
+  saveBankSettings();
+});
+const bankSettings = readJson(BANK_KEY);
+if (bankSettings?.url) $("sheet-url").value = bankSettings.url;
+if (bankSettings?.mode === "sheet") document.querySelector('input[name="bank"][value="sheet"]').checked = true;
+$("sheet-box").hidden = bankMode() !== "sheet";
 
 const takeover = readTakeoverHash();
 if (takeover) saveHost(takeover);

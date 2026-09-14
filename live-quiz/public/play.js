@@ -53,7 +53,8 @@ function renderQuestion(q) {
   syncClock(q.serverNow);
   current = { questionIndex: q.questionIndex, startedAt: q.startedAt, timeLimit: q.timeLimit };
   $("q-number").textContent = `${q.questionIndex + 1}／${q.totalQuestions}`;
-  // 色塊＋形狀＋選項文字（使用者裁決 C1：題目本文只在投影幕）
+  // 色塊＋形狀＋選項文字（使用者裁決 C1：題目本文只在投影幕）；2 選 1、3 選 1 的版面由 CSS 依 data-count 調整
+  $("choices").dataset.count = String(q.choices.length);
   $("choices").replaceChildren(
     ...q.choices.map((text, i) => {
       const style = CHOICE_STYLES[i];

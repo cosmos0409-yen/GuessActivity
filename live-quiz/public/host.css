@@ -18,6 +18,49 @@
 .setup { min-height: 70vh; display: grid; place-content: center; justify-items: center; text-align: center; gap: 1.2rem; }
 .setup .emblem { width: clamp(120px, 12vw, 200px); height: auto; }
 
+/* 題庫選擇：只在建立房間前出現（投影前設定），預覽只列題目，不列正解 */
+.bank-picker {
+  width: min(92vw, 46rem);
+  text-align: left;
+  border: 1px solid var(--gold-soft);
+  border-radius: var(--radius-md);
+  background: rgba(10, 12, 40, 0.55);
+  padding: 0.8rem 1.2rem 1rem;
+  display: grid;
+  gap: 0.5rem;
+  font-size: clamp(1rem, 1.2vw, 1.25rem);
+}
+.bank-picker legend { color: var(--gold); font-weight: 800; padding: 0 0.4rem; }
+.bank-option { display: flex; align-items: center; gap: 0.6rem; cursor: pointer; }
+.bank-option input { width: 1.2em; height: 1.2em; accent-color: var(--gold); }
+.sheet-box { display: grid; gap: 0.5rem; margin-top: 0.3rem; }
+.sheet-row { display: flex; gap: 0.6rem; }
+.sheet-row input {
+  flex: 1;
+  min-width: 0;
+  font-size: 1rem;
+  padding: 0.55rem 0.8rem;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--gold-deep);
+}
+#bank-status { margin: 0; }
+#bank-status.ok { color: #9ff0bc; }
+#bank-status.warn { color: #ffd98a; }
+#bank-status.bad { color: #ffb3b3; }
+.bank-warnings { margin: 0; padding-left: 1.2rem; color: #ffd98a; font-size: 0.9rem; max-height: 8rem; overflow-y: auto; }
+.bank-warnings:empty, .bank-preview:empty { display: none; }
+.bank-preview {
+  margin: 0;
+  padding: 0.5rem 0.5rem 0.5rem 2rem;
+  max-height: 28vh;
+  overflow-y: auto;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-sm);
+  font-size: 0.95rem;
+}
+.bank-preview li { padding: 0.15rem 0; }
+.bank-preview .meta { opacity: 0.65; font-size: 0.85em; margin-left: 0.4rem; }
+
 /* ---- 等待室 ---- */
 .lobby-grid {
   display: grid;
@@ -86,6 +129,7 @@
 
 /* ---- 標題列的小按鈕、對話框（踢人、玩家名單） ---- */
 .btn-sm { font-size: clamp(0.85rem, 1vw, 1.1rem); padding: 0.35rem 1rem; }
+#setup-error { white-space: pre-line; }
 .btn-danger { background: linear-gradient(180deg, #e2334d, var(--c0)); color: #fff; }
 .dialog {
   border: 3px solid var(--gold);
@@ -195,6 +239,8 @@
 .tile:nth-child(4) { animation-delay: 0.24s; }
 .shape { flex: none; display: grid; place-content: center; width: 1.8em; aspect-ratio: 1; border-radius: 12px; background: rgba(0, 0, 0, 0.22); font-size: 0.9em; position: relative; z-index: 1; }
 .tile-text { position: relative; z-index: 1; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+/* 3 選 1：第三個選項佔滿最後一列，版面不會缺一角 */
+.tiles:not(.result-tiles) .tile:nth-child(3):last-child { grid-column: 1 / -1; }
 .controls { display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1.2rem; }
 
 /* ---- 答案揭曉 ---- */

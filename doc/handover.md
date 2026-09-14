@@ -1,6 +1,6 @@
 # 交接手冊 — 司法官學院 闖關猜謎 App
 
-> 最後更新：2026-09-14（搶答系統階段 4 完成並部署，正式環境 150 人壓力測試通過）
+> 最後更新：2026-09-14（搶答系統階段 5 題庫程式完成，本機測過、尚未部署；階段 4 已部署）
 > 完整計畫：`C:\Users\user\.claude\plans\app-1-10-2-3-3-stateless-charm.md`（規則、美術、架構都以此為準；2026-09-13 已在計畫檔裡標註保底關取消的異動）
 
 ## 🚀 下一個 session 從這裡開始（2026-09-14）
@@ -9,19 +9,29 @@
 
 | 系統 | 位置 | 網址 | 狀態 |
 |---|---|---|---|
-| **全場搶答**（Kahoot 式，150 人選 3 人） | `live-quiz/`（原生 HTML/JS＋Cloudflare Workers＋SQLite-backed Durable Objects） | https://live-quiz.cosmos0409.workers.dev | 階段 1–4 已部署（階段 4 版本 94ddea51）；使用者實機測過階段 1–2 |
+| **全場搶答**（Kahoot 式，150 人選 3 人） | `live-quiz/`（原生 HTML/JS＋Cloudflare Workers＋SQLite-backed Durable Objects） | https://live-quiz.cosmos0409.workers.dev | 階段 1–4 已部署（階段 4 版本 94ddea51）；階段 5 本機完成、**尚未部署**；使用者實機測過階段 1–2 |
 | **闖關猜謎**（百萬小學堂式，3 人上台） | 專案根目錄（Vite＋React＋TS） | https://cosmos0409-yen.github.io/GuessActivity/ | 功能完成；題庫 152 題（上架 149）已同步到使用者的 Google 試算表 |
 
 **搶答系統階段 4（2026-09-14 完成並部署）**：主持人踢人、主持人斷線恢復、150 人壓力測試都已完成；報告在 `docs/搶答系統-壓力測試報告.md`。Claude 的部署指令被權限規則擋下，改由**使用者自己在 PowerShell 部署**（在 `C:\猜謎程式\live-quiz` 執行 `npx wrangler deploy`，版本 `94ddea51`），並對正式網址跑 150 人壓力測試，35／35 通過，結算約 0.15 秒。**下一步：使用者用真的手機測試（鎖屏、切換網路、踢人畫面）**，之後進入階段 5。細節見下方「搶答系統階段 4 紀錄」。
 
 **搶答系統剩下的階段**（規格確認文件：`docs/搶答系統-Cloudflare規格確認.md`，每個階段做完都要停下來讓使用者測試）：
-- **階段 5 題庫**：主持人建房時可以選擇讀取 Google 試算表的「搶答題」分頁（CSV 由主持人瀏覽器讀取後上傳給 DO，正解不能讓玩家讀到）、圖片題（圖檔放 `live-quiz/public/img/`，由使用者提供）；目前題庫是 `live-quiz/src/questions.js` 的 5 題測試題，規格是 10 題 × 20 秒。
+- **階段 5 題庫（2026-09-14 程式完成、本機測過、已 commit，⚠️ 尚未部署）**：
+  - 主持人建立房間前選「內建題庫」或「Google 試算表「搶答題」分頁」（貼發布的 CSV 網址 → 讀取 → 預覽只列題目與秒數、不列正解）。讀取成功會存一份在 localStorage（`liveQuiz.bankCache`），現場讀不到試算表時自動改用並寫出存下的時間。
+  - 解析：`public/shared/question-csv.js`（欄位：題目、圖片網址、A–D、正解、秒數、狀態；C、D 可留空＝2／3 選 1；最多 50 題；不合格整列跳過並列出原因）。驗證：`src/question-bank.js`（伺服器最終把關，`/api/rooms` 的 body 帶 `{questions}`，不合格回 400 並列出第幾題，超過 100 KB 回 413）。
+  - 題庫在建房時存進 DO 的 SQLite（meta `questions`、`bankSource`），`game-room.js` 全部改用 `this.bank()`；階段 5 以前的舊房間沒有這筆資料，沿用內建題庫。玩家端仍然只收到選項文字（沒有題目本文、圖片、正解）。
+  - 圖片題：`圖片網址` 填檔名＝`/img/檔名`（檔案放 `live-quiz/public/img/`，要重新部署），或 `https://` 網址；擋掉 `http://`、子資料夾與 `..`。測試圖 `public/img/sample.svg`（使用者要求：圖片上不能印檔名，已拿掉；說明文件也提醒圖檔名稱不要透露答案，建議用 q01.jpg 這種中性名稱）。
+  - 版面：手機 2 選 1 是上下兩大塊、3 選 1 第三個選項佔滿最後一列；投影幕 3 選 1 同樣處理。
+  - 範本：`docs/搶答題範本.csv`；給非工程師的欄位說明已加進 `docs/題庫維護說明.md` 最後一節。
+  - 測試：新增 `node tools/bank-test.mjs`（23 項，純 Node）；`flow-test.mjs` 42 → **53 項**（上傳題庫、二選一、正解不外流、不合格題庫、413、圖片可讀）；150 人壓力測試 35／35。瀏覽器實測：用使用者現有的「題目」分頁（欄位名稱相容）讀到 50 題（上限）並成功出題；圖片題、2／3 選 1 版面都確認過，沒有 console 錯誤。
+  - **試算表「搶答題」分頁已建立（2026-09-14，Claude 用使用者的 Chrome 輸入 5 列範例題）**：gid=1063568289，整份試算表原本就是「發布到網路」，所以 CSV 網址直接可用：`https://docs.google.com/spreadsheets/d/e/2PACX-1vQDMOTLgvahrEnSwzReVTj9CEbwKDgXjrAZ3Tu7h8mFLWTJlQr4gwfTOJjwLfSgFjbEhEeUxunp3viH/pub?gid=1063568289&single=true&output=csv`（解析結果 4 題、0 警告；「待審」那列被跳過）。編輯網址 `https://docs.google.com/spreadsheets/d/11pdA3ihVsfwWnpeCPwtvJTio29CVRlG51IikwY0Fj2E/edit`。操作注意：Chrome 視窗在背景時剪貼簿不能用，改用逐格輸入；**中文要先按 F2 進入編輯模式再輸入**（否則會被吃掉），Enter 會進入編輯而不是換列，每列開頭用網址 `#gid=…&range=A2` 跳過去並檢查分頁名稱與名稱方塊。
+  - **等使用者**：換成正式的 10 題與圖片；自己部署；實機測試。修改前的檔案備份在 `~/.claude/ops/backup-20260914/live-quiz-stage5/`。
 - **階段 6 文件**：`live-quiz/README.md`（安裝 wrangler、`wrangler dev`、部署、換題庫、查看免費額度的位置），並更新根目錄 README 與 CLAUDE.md。
 
 **搶答系統常用指令**（都在 `live-quiz/` 底下，Bash 要先修 PATH，見下方環境地雷）：
 - 本機：`npx wrangler dev --port 8787`
-- 部署：`CI=1 npx wrangler deploy`（wrangler 4.131.1，這台電腦已經 `wrangler login`）
-- 流程測試：`node tools/flow-test.mjs [網址]`（42 項；不帶參數時測本機）
+- 部署：**由使用者在 PowerShell 執行**（Claude 的部署指令會被權限規則擋下）：在 live-quiz 資料夾執行 `npx wrangler deploy`
+- 流程測試：`node tools/flow-test.mjs [網址]`（53 項；不帶參數時測本機）
+- 題庫測試：`node tools/bank-test.mjs`（23 項，純 Node，不用開伺服器）
 - 壓力測試：`node tools/loadtest.mjs [網址] [人數]`（預設 150 人、35 項檢查＋延遲量測；**不要在活動當天對正式網址跑**）
 - 模擬玩家：`node tools/bots.mjs [網址] [人數] [房間碼]`
 - 正式環境即時紀錄：`npx wrangler tail live-quiz --format pretty`

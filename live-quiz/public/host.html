@@ -27,6 +27,21 @@
       <img class="emblem" src="/brand/emblem.jpg" alt="" width="200" height="200">
       <h1 class="title">全場搶答</h1>
       <p class="muted">建立房間後，觀眾用手機掃描 QR code 加入</p>
+      <fieldset class="bank-picker">
+        <legend>題庫</legend>
+        <label class="bank-option"><input type="radio" name="bank" value="builtin" checked> 內建題庫</label>
+        <label class="bank-option"><input type="radio" name="bank" value="sheet"> Google 試算表「搶答題」分頁</label>
+        <div id="sheet-box" class="sheet-box" hidden>
+          <label for="sheet-url" class="small">「發布到網路」的 CSV 網址</label>
+          <div class="sheet-row">
+            <input id="sheet-url" type="url" inputmode="url" autocomplete="off" placeholder="https://docs.google.com/spreadsheets/d/e/…/pub?gid=…&amp;output=csv">
+            <button id="load-sheet" class="btn btn-ghost btn-sm" type="button">讀取</button>
+          </div>
+          <p id="bank-status" class="small" role="status"></p>
+          <ul id="bank-warnings" class="bank-warnings"></ul>
+          <ol id="bank-preview" class="bank-preview"></ol>
+        </div>
+      </fieldset>
       <button id="create" class="btn btn-xl">建立房間</button>
       <p id="setup-error" class="error" role="alert"></p>
     </section>

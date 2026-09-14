@@ -191,7 +191,49 @@ const badHost = await client(roomB.roomCode);
 badHost.send({ type: "join", role: "host", roomCode: roomB.roomCode, hostToken: "00000000-0000-0000-0000-000000000000" });
 ok((await badHost.waitFor("error")).code === "BAD_HOST_TOKEN", "驗證碼錯誤不能接手主持人");
 
-for (const c of [host, late, ...players, hostB, hostB2, retry, badHost, ...pB]) {
+// ---------- 階段 5：主持人上傳題庫（試算表「搶答題」分頁）、圖片題 ----------
+const customBank = [
+  { text: "（上傳）二選一附圖", choices: ["是", "否"], correct: 1, timeLimit: 10, image: "/img/sample.svg" },
+  { text: "（上傳）四選一", choices: ["甲", "乙", "丙", "丁"], correct: 2, timeLimit: 20, image: null },
+];
+const createC = await fetch(`${BASE}/api/rooms`, { method: "POST", body: JSON.stringify({ questions: customBank }) });
+const roomC = await createC.json();
+ok(createC.status === 201 && roomC.totalQuestions === 2 && roomC.bankSource === "uploaded", "上傳 2 題的題庫可以建立房間");
+const hostC = await client(roomC.roomCode);
+hostC.send({ type: "join", role: "host", roomCode: roomC.roomCode, hostToken: roomC.hostToken });
+const hostCJoined = await hostC.waitFor("joined");
+ok(JSON.stringify(hostCJoined.questions) === JSON.stringify(customBank), "主持人拿到的是上傳的題庫（含正解與圖片）");
+const pC = await client(roomC.roomCode);
+pC.send({ type: "join", role: "player", roomCode: roomC.roomCode, nickname: "上傳測試" });
+const pCJoined = await pC.waitFor("joined");
+ok(pCJoined.totalQuestions === 2 && pCJoined.questions === undefined, "玩家看到題數 2，但拿不到題庫");
+hostC.send({ type: "start" });
+const qsC = await pC.waitFor("question_start", (m) => m.questionIndex === 0);
+ok(qsC.choices.length === 2 && qsC.timeLimit === 10, "二選一題：玩家收到 2 個選項、秒數 10");
+ok(!("correct" in qsC) && !("text" in qsC) && !("image" in qsC), "question_start 不帶正解、題目本文與圖片");
+pC.send({ type: "answer", questionIndex: 0, choice: 1 });
+const rC = await pC.waitFor("your_result", (m) => m.questionIndex === 0, 5000);
+ok(rC.correct === true, "上傳題庫的正解用來計分（選「否」答對）");
+pC.send({ type: "answer", questionIndex: 0, choice: 3 });
+hostC.send({ type: "next" });
+await pC.waitFor("question_start", (m) => m.questionIndex === 1);
+pC.send({ type: "answer", questionIndex: 1, choice: 3 });
+ok((await pC.waitFor("answer_ack", (m) => m.questionIndex === 1)).accepted === true, "第 2 題四選一可以選 D");
+
+const badBank = await fetch(`${BASE}/api/rooms`, {
+  method: "POST",
+  body: JSON.stringify({ questions: [{ text: "壞題", choices: ["只有一個"], correct: 0 }] }),
+});
+const badBankBody = await badBank.json();
+ok(badBank.status === 400 && badBankBody.errors?.[0]?.includes("第 1 題"), "不合格的題庫被拒絕，並指出第幾題");
+const notJson = await fetch(`${BASE}/api/rooms`, { method: "POST", body: "不是 JSON" });
+ok(notJson.status === 400, "題庫不是 JSON 時回 400");
+const huge = await fetch(`${BASE}/api/rooms`, { method: "POST", body: "x".repeat(100_001) });
+ok(huge.status === 413, "題庫超過 100 KB 時回 413");
+const img = await fetch(`${BASE}/img/sample.svg`);
+ok(img.ok && (img.headers.get("content-type") ?? "").includes("svg"), "public/img/ 的圖片可以讀取");
+
+for (const c of [host, late, ...players, hostB, hostB2, retry, badHost, ...pB, hostC, pC]) {
   try {
     c.ws.close();
   } catch {

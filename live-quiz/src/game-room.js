@@ -7,6 +7,7 @@
 //   一場 150 人 × 10 題約寫 1,500 列，免費額度每天 10 萬列，足夠。
 import { DurableObject } from "cloudflare:workers";
 import { QUESTIONS } from "./questions.js";
+import { validateQuestions } from "./question-bank.js";
 import { scoreFor } from "./scoring.js";
 
 const NICKNAME_MAX = 12;
@@ -88,8 +89,18 @@ export class GameRoom extends DurableObject {
       }));
   }
 
+  // 這個房間的題庫：建立房間時就存進 SQLite（主持人上傳的試算表題庫，或內建題庫），
+  // 所以之後改 src/questions.js 不會影響進行中的房間。階段 5 以前建立的舊房間沒有這筆資料，沿用內建題庫。
+  bank() {
+    if (!this.cachedBank) {
+      const raw = this.getMeta("questions");
+      this.cachedBank = raw ? JSON.parse(raw) : QUESTIONS;
+    }
+    return this.cachedBank;
+  }
+
   currentQuestion() {
-    return QUESTIONS[this.numMeta("questionIndex")];
+    return this.bank()[this.numMeta("questionIndex")];
   }
 
   // 被踢出的玩家的作答不算進已作答人數、作答分布與排名
@@ -129,13 +140,31 @@ export class GameRoom extends DurableObject {
 
     if (url.pathname === "/init") {
       if (this.getMeta("hostToken")) return new Response("房間已存在", { status: 409 });
+      // 主持人可以上傳題庫（{ questions: [...] }）；沒帶就用內建題庫。兩者都要通過驗證。
+      let uploaded = null;
+      const body = await request.text();
+      if (body) {
+        try {
+          uploaded = JSON.parse(body).questions ?? null;
+        } catch {
+          return Response.json({ error: "題庫格式錯誤" }, { status: 400 });
+        }
+      }
+      const { questions, errors } = validateQuestions(uploaded ?? QUESTIONS);
+      if (errors.length) return Response.json({ error: "題庫有錯誤，房間沒有建立", errors }, { status: 400 });
+      this.setMeta("questions", JSON.stringify(questions));
+      this.setMeta("bankSource", uploaded ? "uploaded" : "builtin");
+      this.cachedBank = questions;
       const hostToken = crypto.randomUUID();
       this.setMeta("roomCode", url.searchParams.get("code") ?? "");
       this.setMeta("hostToken", hostToken);
       this.setMeta("phase", "lobby");
       this.setMeta("questionIndex", -1);
       this.setMeta("createdAt", Date.now());
-      return Response.json({ roomCode: this.getMeta("roomCode"), hostToken }, { status: 201 });
+      return Response.json(
+        { roomCode: this.getMeta("roomCode"), hostToken, totalQuestions: questions.length, bankSource: this.getMeta("bankSource") },
+        { status: 201 },
+      );
     }
 
     const pair = new WebSocketPair();
@@ -229,8 +258,8 @@ export class GameRoom extends DurableObject {
         serverNow,
         phase,
         questionIndex,
-        totalQuestions: QUESTIONS.length,
-        questions: QUESTIONS,
+        totalQuestions: this.bank().length,
+        questions: this.bank(),
         question: phase === "question" ? this.questionPayload() : null,
       });
       this.sendLobbyToHosts();
@@ -284,7 +313,7 @@ export class GameRoom extends DurableObject {
       serverNow,
       phase,
       questionIndex,
-      totalQuestions: QUESTIONS.length,
+      totalQuestions: this.bank().length,
       totalScore: standing?.score ?? 0,
       rank: standing?.rank ?? null,
       question: phase === "question" ? this.questionPayload(player.playerId) : null,
@@ -308,7 +337,7 @@ export class GameRoom extends DurableObject {
     if (this.getMeta("phase") !== "lobby") {
       return this.send(ws, { type: "error", code: "ALREADY_STARTED", message: "遊戲已經開始了" });
     }
-    if (!QUESTIONS.length) return this.send(ws, { type: "error", code: "NO_QUESTIONS", message: "題庫是空的" });
+    if (!this.bank().length) return this.send(ws, { type: "error", code: "NO_QUESTIONS", message: "題庫是空的" });
     await this.startQuestion(0);
   }
 
@@ -317,17 +346,17 @@ export class GameRoom extends DurableObject {
       return this.send(ws, { type: "error", code: "NOT_IN_RESULT", message: "目前不在結算畫面" });
     }
     const next = this.numMeta("questionIndex") + 1;
-    if (next < QUESTIONS.length) await this.startQuestion(next);
+    if (next < this.bank().length) await this.startQuestion(next);
     else this.endGame();
   }
 
   // question_start 只帶「第幾題＋開始時間＋時限＋選項文字」，不帶題目本文（規格第 5 節、使用者裁決 C1）
   questionPayload(playerId = null) {
     const questionIndex = this.numMeta("questionIndex");
-    const q = QUESTIONS[questionIndex];
+    const q = this.bank()[questionIndex];
     const payload = {
       questionIndex,
-      totalQuestions: QUESTIONS.length,
+      totalQuestions: this.bank().length,
       startedAt: this.numMeta("startedAt"),
       timeLimit: this.numMeta("timeLimit"),
       serverNow: Date.now(),
@@ -343,7 +372,7 @@ export class GameRoom extends DurableObject {
   }
 
   async startQuestion(index) {
-    const q = QUESTIONS[index];
+    const q = this.bank()[index];
     const startedAt = Date.now();
     this.setMeta("phase", "question");
     this.setMeta("questionIndex", index);
@@ -367,7 +396,7 @@ export class GameRoom extends DurableObject {
     const reject = (reason) => this.send(ws, { type: "answer_ack", questionIndex: msg.questionIndex, accepted: false, reason });
 
     if (this.getMeta("phase") !== "question" || msg.questionIndex !== questionIndex) return reject("not_open");
-    const q = QUESTIONS[questionIndex];
+    const q = this.bank()[questionIndex];
     const choice = msg.choice;
     if (!Number.isInteger(choice) || choice < 0 || choice >= q.choices.length) return reject("bad_choice");
 
@@ -461,7 +490,7 @@ export class GameRoom extends DurableObject {
     this.answerCountTimer = null;
 
     const questionIndex = this.numMeta("questionIndex");
-    const q = QUESTIONS[questionIndex];
+    const q = this.bank()[questionIndex];
     const distribution = q.choices.map(() => 0);
     for (const row of this.sql
       .exec(
@@ -476,13 +505,13 @@ export class GameRoom extends DurableObject {
     const payload = {
       type: "question_end",
       questionIndex,
-      totalQuestions: QUESTIONS.length,
+      totalQuestions: this.bank().length,
       correctChoice: q.correct,
       distribution,
       answered: distribution.reduce((a, b) => a + b, 0),
       playerCount: standings.length,
       leaderboard: this.leaderboardOf(standings),
-      isLast: questionIndex === QUESTIONS.length - 1,
+      isLast: questionIndex === this.bank().length - 1,
     };
     this.setMeta("lastResult", JSON.stringify(payload));
 
