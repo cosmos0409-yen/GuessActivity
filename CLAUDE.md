@@ -1,6 +1,7 @@
 # CLAUDE.md — 司法官學院 闖關猜謎 App
 
 司法官學院活動用的現場闖關猜謎遊戲（Vite + React + TypeScript，單機執行，主持人操作、投影給觀眾看）。
+另有獨立的**全場搶答系統** `live-quiz/`（原生 HTML/JS＋Cloudflare Workers＋SQLite Durable Objects，150 人手機搶答選出前 3 名），細節見 `live-quiz/README.md`。
 
 ## 常用指令
 
@@ -9,6 +10,17 @@ npm run dev          # 開發伺服器，日常開發與正式活動都用這個
 npx vitest run        # 跑全部測試
 npx tsc --noEmit       # 只做型別檢查，不輸出檔案
 ```
+
+全場搶答（在 `live-quiz/` 底下）：
+
+```
+npx wrangler dev --port 8787            # 本機
+node tools/bank-test.mjs                # 題庫解析與驗證（不需要伺服器）
+node tools/flow-test.mjs [網址]          # 完整流程測試（不帶網址測本機）
+node tools/loadtest.mjs [網址] [人數]    # 壓力測試，預設 150 人；活動當天不要對正式網址跑
+```
+
+**全場搶答的部署由使用者自己在 PowerShell 執行**（`npx wrangler deploy`）：Claude 執行部署會被權限規則擋下。
 
 **禁止執行 `npm run build`**：在目前環境的 Node 24 下，`vite build` 階段會卡死在
 「39 modules transformed」（疑似 `@rollup/rollup-win32-x64-msvc` native binding 相容性問題，
@@ -32,6 +44,7 @@ npx tsc --noEmit       # 只做型別檢查，不輸出檔案
 | `gas/` | 投票用的 Google Apps Script（`Code.gs`、`parseChoice.gs`）與部署教學 |
 | `docs/` | 給非工程師看的操作文件（題庫維護、使用者待辦清單） |
 | `doc/handover.md` | 給下一個 Claude session 的完整交接手冊 |
+| `live-quiz/` | 全場搶答系統（獨立程式）：`src/` 伺服器（Worker、Durable Object、題庫驗證）、`public/` 網頁、`tools/` 測試工具，說明見 `live-quiz/README.md` |
 
 ## 硬性約束
 
@@ -42,6 +55,7 @@ npx tsc --noEmit       # 只做型別檢查，不輸出檔案
 - **一旦使用任一張提示卡，這一題的倒數就永久結束**，不會再恢復計時（見 `gameMachine.ts` 的 lifeline 轉場）。
 - 對象是**考過國家考試的學員**，題目與選項不能出得幼稚或太簡單。
 - 美術／配色一律使用司法官學院院徽色系（見 `src/styles/tokens.css`），不要自行換成別的主題色。
+- 全場搶答：**正解與題目本文只能傳給主持人**，玩家端的 WebSocket 訊息只能帶選項文字；題庫一律經過 `live-quiz/src/question-bank.js` 驗證。
 
 ## 環境注意事項
 
