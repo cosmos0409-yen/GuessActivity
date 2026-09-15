@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import type { Category } from "../data/types";
 import { normalizeCategoryName, stripLeadingEmoji, type AvailabilityMap } from "../data/picker";
 
@@ -14,9 +14,9 @@ export interface CategoryPickerProps {
 }
 
 /**
- * 題型卡片分成「法律」與「知識」左右兩區；該關難度沒有題目時停用。
+ * 題型卡片不分領域，全部排在同一個格子裡（照題庫順序）；該關難度沒有題目時停用。
  * 每個題型每場只能選一次：已選過的題型會變灰停用並標示「已選過」；
- * 如果本關所有「還沒選過」的題型都沒有題目可抽（理論上 10 種題型對 5 關不會發生），
+ * 如果本關所有「還沒選過」的題型都沒有題目可抽（題型數多於關卡數時理論上不會發生），
  * 才會出現「允許重選已用過的題型」的選項讓主持人自行略過限制。
  */
 export default function CategoryPicker({
@@ -29,9 +29,9 @@ export default function CategoryPicker({
 }: CategoryPickerProps) {
   const [allowRepeat, setAllowRepeat] = useState(false);
 
+  // 不分領域，全部照題庫「題型」分頁的順序排；盡量排成兩列，一列最多 5 張
   const enabledCategories = categories.filter((c) => c.enabled);
-  const legal = enabledCategories.filter((c) => c.domain === "法律");
-  const knowledge = enabledCategories.filter((c) => c.domain === "知識");
+  const columns = Math.min(5, Math.max(1, Math.ceil(enabledCategories.length / 2)));
 
   const countFor = (name: string): number => availability[normalizeCategoryName(name)]?.[difficulty] ?? 0;
   // pickedCategories 裡的名稱也可能帶（或不帶）變體選擇符，一律正規化後再比對，
@@ -70,14 +70,9 @@ export default function CategoryPicker({
   return (
     <section className="tpi-picker" aria-label="選擇題型">
       <h2 className="tpi-picker__heading">參賽者，請選一種題型挑戰！</h2>
-      <div className="tpi-picker__columns">
-        <div className="tpi-picker__column">
-          <h3 className="tpi-picker__column-title">⚖️ 法律</h3>
-          <div className="tpi-picker__grid">{legal.map(renderCard)}</div>
-        </div>
-        <div className="tpi-picker__column">
-          <h3 className="tpi-picker__column-title">🧠 知識</h3>
-          <div className="tpi-picker__grid">{knowledge.map(renderCard)}</div>
+      <div className="tpi-picker__panel">
+        <div className="tpi-picker__grid" style={{ "--tpi-picker-cols": columns } as CSSProperties}>
+          {enabledCategories.map(renderCard)}
         </div>
       </div>
       {!anyPickable && (

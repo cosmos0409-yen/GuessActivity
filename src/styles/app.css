@@ -227,36 +227,19 @@ button:disabled {
   text-align: center;
 }
 
-.tpi-picker__columns {
-  display: flex;
-  gap: clamp(16px, 3vw, 40px);
+.tpi-picker__panel {
   width: 100%;
-  max-width: 1500px;
-  justify-content: center;
-}
-
-.tpi-picker__column {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  max-width: 1300px;
   background: rgba(255, 255, 255, 0.05);
   border-radius: var(--tpi-radius-lg);
   padding: clamp(14px, 2vw, 24px);
   border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
-.tpi-picker__column-title {
-  font-family: var(--tpi-font-heading);
-  font-size: clamp(16px, 1.6vw, 22px);
-  margin: 0 0 4px;
-  color: var(--tpi-gold);
-  text-align: center;
-}
-
+/* 欄數由 CategoryPicker 依題型數量算出（--tpi-picker-cols），盡量排成兩列 */
 .tpi-picker__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: repeat(var(--tpi-picker-cols, 4), minmax(0, 1fr));
   gap: clamp(8px, 1.2vw, 16px);
 }
 
