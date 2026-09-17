@@ -2,8 +2,8 @@
 //
 // 回歸測試（2026-09-13 第二輪試玩問題 3、4）：
 //
-// 問題 3：題目剛出現、主持人還沒按「開始」時，倒數位置顯示「⏸ 不計時」，
-//   應該顯示完整秒數待命；「不計時」只在使用提示卡（永久停止倒數）之後才出現。
+// 問題 3：題目剛出現時，倒數位置顯示「⏸ 不計時」；「不計時」只在使用提示卡（永久停止倒數）之後才出現。
+//   2026-09-17 起題目一出現就自動開始計時（不再有「開始」按鈕），測試改成驗證自動開始後的顯示。
 //   根本原因：src/App.tsx 把 CountdownRing 的 stopped 算成 `state.phase !== "counting"`，
 //   questionShown（還沒按開始）也會被誤判成「不計時」。
 //
@@ -54,13 +54,18 @@ async function bootAndPickCategory() {
   const categoryButtons = await screen.findAllByRole("button", { name: /剩餘 \d+ 題/ });
   const pickable = categoryButtons.find((btn) => !btn.hasAttribute("disabled"));
   expect(pickable).toBeDefined();
-  fireEvent.click(pickable!);
 
-  await screen.findByRole("button", { name: "開始" });
+  // 題目一出現倒數就開始，假時鐘要在點題型之前裝好
+  vi.useFakeTimers({
+    toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date", "performance"],
+  });
+  act(() => {
+    fireEvent.click(pickable!);
+  });
 }
 
 describe("倒數待命畫面（問題 3）", () => {
-  it("題目剛出現、還沒按開始時，要顯示完整秒數待命，不能顯示「不計時」", async () => {
+  it("題目剛出現（自動開始計時）時顯示完整秒數，不能顯示「不計時」", async () => {
     await bootAndPickCategory();
 
     expect(document.querySelector(".tpi-countdown__notimer")).toBeNull();
@@ -68,15 +73,9 @@ describe("倒數待命畫面（問題 3）", () => {
     expect(label?.textContent).toBe("30");
   });
 
-  it("按下開始、倒數開始跑之後仍然不是「不計時」", async () => {
+  it("倒數自動開始跑之後仍然不是「不計時」，秒數真的在減少", async () => {
     await bootAndPickCategory();
-    const startButton = screen.getByRole("button", { name: "開始" }) as HTMLButtonElement;
-
-    vi.useFakeTimers({
-      toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date", "performance"],
-    });
     act(() => {
-      fireEvent.click(startButton);
       vi.advanceTimersByTime(3000);
     });
 
@@ -89,15 +88,6 @@ describe("倒數待命畫面（問題 3）", () => {
 describe("時間到提示與結算原因（問題 4）", () => {
   it("倒數歸零要先顯示「⏰ 時間到！」，1.5 秒後才消失；結算畫面要寫「時間到」", async () => {
     await bootAndPickCategory();
-    const startButton = screen.getByRole("button", { name: "開始" }) as HTMLButtonElement;
-
-    vi.useFakeTimers({
-      toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date", "performance"],
-    });
-
-    act(() => {
-      fireEvent.click(startButton);
-    });
 
     // 推進超過 30 秒，觸發 TIMEOUT。
     act(() => {

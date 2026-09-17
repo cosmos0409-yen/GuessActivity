@@ -47,7 +47,8 @@ async function bootToQuestion() {
     .getAllByRole("button")
     .find((b) => !(b as HTMLButtonElement).disabled)!;
   fireEvent.click(category);
-  fireEvent.click(await screen.findByRole("button", { name: "開始" }));
+  // 題目一出現就自動開始計時，不用再按「開始」
+  await screen.findByRole("group", { name: "選項" });
 }
 
 describe("全場一起協助：彈窗、收起、百分比留在選項上", () => {

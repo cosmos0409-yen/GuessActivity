@@ -48,7 +48,7 @@ afterEach(() => {
 });
 
 describe("App 倒數計時整合測試", () => {
-  it("按下「開始」後，倒數會隨時間真的遞減；到 0 會觸發 TIMEOUT（下一步從停用變成可用）", async () => {
+  it("點開題目就自動開始計時（不需要按「開始」），倒數會隨時間真的遞減；到 0 會觸發 TIMEOUT", async () => {
     render(<App />);
 
     // 開場鎖定畫面
@@ -64,27 +64,23 @@ describe("App 倒數計時整合測試", () => {
     const categoryButtons = await screen.findAllByRole("button", { name: /剩餘 \d+ 題/ });
     const pickable = categoryButtons.find((btn) => !btn.hasAttribute("disabled"));
     expect(pickable).toBeDefined();
-    fireEvent.click(pickable!);
 
-    // 進入 questionShown：主持人操作列的「開始」按鈕應該是可以按的
-    const startButton = (await screen.findByRole("button", { name: "開始" })) as HTMLButtonElement;
-    expect(startButton.disabled).toBe(false);
-
-    // 倒數還沒開始前，「下一步」是停用的（還沒揭曉答案）
-    expect((screen.getByRole("button", { name: "下一步" }) as HTMLButtonElement).disabled).toBe(true);
-
+    // 題目一出現倒數就開始，所以假時鐘要在點題型之前裝好
     vi.useFakeTimers({
       toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date", "performance"],
     });
-
     act(() => {
-      fireEvent.click(startButton);
+      fireEvent.click(pickable!);
     });
+
+    // 主持人操作列不再有「開始」按鈕；還沒揭曉答案，「下一步」停用
+    expect(screen.queryByRole("button", { name: "開始" })).toBeNull();
+    expect((screen.getByRole("button", { name: "下一步" }) as HTMLButtonElement).disabled).toBe(true);
 
     const before = readCountdownLabel();
     expect(before).toBe("30"); // 每題預設 30 秒
 
-    // 推進 3 秒：如果 mainCountdown.start() 沒有被呼叫，這裡的數字完全不會變。
+    // 推進 3 秒：如果題目出現時沒有自動呼叫 mainCountdown.start()，這裡的數字完全不會變。
     act(() => {
       vi.advanceTimersByTime(3000);
     });

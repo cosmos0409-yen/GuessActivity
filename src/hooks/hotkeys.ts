@@ -66,7 +66,7 @@ export const HOTKEY_TABLE: HotkeyTableEntry[] = [
   {
     id: "toggleCountdown",
     display: "Space",
-    label: "開始或暫停倒數",
+    label: "暫停／恢復倒數",
     test: (e) => e.key === " " || e.code === "Space",
   },
   {

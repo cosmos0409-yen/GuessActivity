@@ -150,13 +150,14 @@ export default function App() {
     },
   });
 
-  // 換題／新題目時重設主倒數
+  // 換題／新題目時重設主倒數，並且題目一出現就開始計時（2026-09-17 使用者要求：不需要再按「開始」）
   useEffect(() => {
     if (state.phase === "questionShown") {
       mainCountdown.reset(state.config.seconds);
       sfx.setBedUrgent(false);
       lastTickSecondRef.current = null;
       setTimeUpNotice(false);
+      handleStart();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.question?.id, state.phase === "questionShown"]);
@@ -629,7 +630,6 @@ export default function App() {
   }
 
   const hostActions: HostBarAction[] = [
-    { label: "開始", onClick: handleStart, enabled: can(state, "START"), variant: "primary" },
     {
       label: state.paused ? "恢復" : "暫停",
       onClick: handlePauseResume,
