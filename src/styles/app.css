@@ -360,14 +360,14 @@ button:disabled {
   border-radius: var(--tpi-radius-lg);
   box-shadow: var(--tpi-shadow-card);
   border: 4px solid var(--tpi-gold);
-  padding: clamp(14px, 2.4vh, 40px) clamp(24px, 4vw, 56px);
+  padding: calc(var(--tpi-fit, 1) * clamp(14px, 2.4vh, 40px)) clamp(24px, 4vw, 56px);
   max-width: 1400px;
   width: 100%;
   max-height: 100%;
   text-align: center;
   display: flex;
   flex-direction: column;
-  gap: clamp(8px, 1.2vh, 18px);
+  gap: calc(var(--tpi-fit, 1) * clamp(8px, 1.2vh, 18px));
   overflow-y: auto;
 }
 
@@ -375,7 +375,7 @@ button:disabled {
   display: flex;
   justify-content: center;
   gap: 12px;
-  font-size: var(--tpi-font-size-label);
+  font-size: max(16px, calc(var(--tpi-fit, 1) * var(--tpi-font-size-label)));
   color: var(--tpi-navy);
   font-weight: 700;
 }
@@ -383,11 +383,11 @@ button:disabled {
 .tpi-question-card__meta span {
   background: rgba(46, 50, 132, 0.08);
   border-radius: 999px;
-  padding: 4px 16px;
+  padding: calc(var(--tpi-fit, 1) * 4px) 16px;
 }
 
 .tpi-question-card__text {
-  font-size: var(--tpi-font-size-question);
+  font-size: max(28px, calc(var(--tpi-fit, 1) * var(--tpi-font-size-question)));
   line-height: 1.35;
   font-weight: 700;
   margin: 0;
@@ -409,7 +409,7 @@ button:disabled {
   flex-shrink: 0;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: clamp(8px, 1.4vw, 22px);
+  gap: calc(var(--tpi-fit, 1) * clamp(8px, 1.4vw, 22px));
   width: 100%;
   max-width: 1400px;
   margin: 0 auto;
@@ -422,12 +422,12 @@ button:disabled {
   gap: clamp(10px, 1.4vw, 18px);
   border-radius: var(--tpi-radius-md);
   border: 4px solid transparent;
-  padding: clamp(14px, 2vh, 24px) clamp(16px, 2vw, 28px);
-  font-size: var(--tpi-font-size-option);
+  padding: calc(var(--tpi-fit, 1) * clamp(14px, 2vh, 24px)) clamp(16px, 2vw, 28px);
+  font-size: max(22px, calc(var(--tpi-fit, 1) * var(--tpi-font-size-option)));
   font-weight: 700;
   color: #fff;
   text-align: left;
-  min-height: clamp(50px, 9vh, 110px);
+  min-height: calc(var(--tpi-fit, 1) * clamp(50px, 9vh, 110px));
   box-shadow: var(--tpi-shadow-raised);
   transition: transform 0.12s ease, opacity 0.25s ease;
 }
@@ -795,7 +795,7 @@ button:disabled {
 .tpi-poll-modal__question {
   margin: 0;
   font-family: var(--tpi-font-heading);
-  font-size: clamp(20px, 2.2vw, 40px);
+  font-size: max(18px, calc(var(--tpi-fit, 1) * clamp(20px, 2.2vw, 40px)));
   line-height: 1.35;
 }
 .tpi-poll-modal__body {
@@ -804,7 +804,8 @@ button:disabled {
   gap: clamp(16px, 3vw, 48px);
 }
 .tpi-poll-modal .tpi-poll__qr img {
-  width: clamp(200px, 22vw, 400px);
+  /* QR code 最小 180px，投影在後排也掃得到 */
+  width: max(180px, calc(var(--tpi-fit, 1) * clamp(200px, 22vw, 400px)));
   height: auto;
   aspect-ratio: 1;
 }
@@ -813,16 +814,17 @@ button:disabled {
   font-weight: 700;
 }
 .tpi-poll-modal .tpi-poll__bar-row {
-  font-size: clamp(16px, 1.5vw, 28px);
+  font-size: max(16px, calc(var(--tpi-fit, 1) * clamp(16px, 1.5vw, 28px)));
 }
 .tpi-poll-modal .tpi-poll__bar-track {
   height: clamp(22px, 3.2vh, 40px);
 }
+/* 選項文字完整顯示（可換行），長條放在文字下一行：觀眾要看得到完整選項才能投票 */
 .tpi-poll__bar-text {
-  width: clamp(120px, 22%, 360px);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  grid-area: text;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.3;
 }
 .tpi-poll__bar-row--removed {
   opacity: 0.35;
@@ -976,19 +978,27 @@ button:disabled {
 }
 
 .tpi-poll__bar-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto auto;
+  grid-template-areas: "label text pct input" ". track track track";
   align-items: center;
-  gap: 10px;
+  column-gap: 10px;
+  row-gap: 4px;
+}
+
+.tpi-poll__manual-input {
+  grid-area: input;
 }
 
 .tpi-poll__bar-label {
+  grid-area: label;
   width: 32px;
   font-weight: 700;
   font-family: var(--tpi-font-heading);
 }
 
 .tpi-poll__bar-track {
-  flex: 1;
+  grid-area: track;
   height: clamp(20px, 2.6vh, 32px);
   background: rgba(255, 255, 255, 0.12);
   border-radius: 999px;
@@ -1015,6 +1025,7 @@ button:disabled {
 }
 
 .tpi-poll__bar-pct {
+  grid-area: pct;
   width: 48px;
   text-align: right;
   font-weight: 700;
@@ -1101,7 +1112,7 @@ button:disabled {
 
 .tpi-explanation__conclusion {
   font-family: var(--tpi-font-heading);
-  font-size: clamp(26px, 2.6vw, 40px);
+  font-size: max(22px, calc(var(--tpi-fit, 1) * clamp(26px, 2.6vw, 40px)));
   color: var(--tpi-navy);
   margin: 0;
   display: flex;
@@ -1110,7 +1121,7 @@ button:disabled {
 }
 
 .tpi-explanation__body {
-  font-size: var(--tpi-font-size-explanation);
+  font-size: max(20px, calc(var(--tpi-fit, 1) * var(--tpi-font-size-explanation)));
   line-height: 1.5;
   margin: 0;
 }

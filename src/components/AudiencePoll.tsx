@@ -1,4 +1,6 @@
+import { useRef } from "react";
 import type { OptionKey, VoteSnapshot } from "../vote/VoteProvider";
+import { useFitText } from "../app/fitText";
 
 export interface AudiencePollProps {
   /** 線上投票啟用時才有值；用來顯示 QR code */
@@ -42,10 +44,13 @@ export default function AudiencePoll({
   onMinimize,
 }: AudiencePollProps) {
   const showError = snapshot.status === "error";
+  // 選項文字會換行完整顯示；彈窗放不下時整體縮小字級（QR code 另有 180px 下限）
+  const cardRef = useRef<HTMLElement>(null);
+  useFitText(cardRef, [], [questionText, manualMode, showError, removedOption, ...Object.values(optionTexts)]);
 
   return (
     <div className="tpi-poll-modal" role="dialog" aria-label="全場一起協助投票">
-      <section className="tpi-poll-modal__card">
+      <section className="tpi-poll-modal__card" ref={cardRef}>
         <header className="tpi-poll-modal__head">
           <p className="tpi-poll-modal__question">{questionText}</p>
           <button type="button" className="tpi-btn tpi-btn--outline" onClick={onMinimize}>

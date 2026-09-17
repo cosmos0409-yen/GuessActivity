@@ -186,6 +186,24 @@ describe("SoundManager", () => {
     manager.stopBed();
   });
 
+  it("等待室背景音（lobby）可以播放，換成倒數背景音時會先停掉舊的，不疊加兩層", () => {
+    const manager = new SoundManager();
+    manager.unlock();
+    manager.startBed("lobby");
+    const lobbyNodes = [...FakeAudioContext.oscillators];
+    expect(lobbyNodes.length).toBeGreaterThan(0);
+
+    manager.startBed("lobby"); // 同一種：no-op
+    expect(FakeAudioContext.oscillators.length).toBe(lobbyNodes.length);
+
+    manager.startBed("countdown"); // 換一種：舊的節點都要被停掉
+    for (const osc of lobbyNodes) {
+      expect(osc.stop).toHaveBeenCalled();
+    }
+    expect(FakeAudioContext.oscillators.length).toBeGreaterThan(lobbyNodes.length);
+    manager.stopBed();
+  });
+
   it("有 override 時優先使用 AudioBuffer 播放；404 時退回合成音", async () => {
     (globalThis as unknown as { fetch: unknown }).fetch = vi.fn(async (url: string) => {
       if (String(url).includes("/tick.mp3")) {

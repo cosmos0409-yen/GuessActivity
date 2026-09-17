@@ -10,6 +10,7 @@ import type { OptionKey } from "./data/types";
 import { can, initialState } from "./state/gameMachine";
 import { appReducer } from "./app/configReducer";
 import { useCountdown } from "./hooks/useCountdown";
+import { useFitText } from "./app/fitText";
 import { useHotkeys } from "./hooks/useHotkeys";
 
 import { drawQuestionForRound, chooseRemovableOption, makeRoundId, makeSessionId } from "./app/gameFlow";
@@ -176,6 +177,15 @@ export default function App() {
   // 投票彈窗是否收起（收起後在右側欄顯示小視窗，票照收）
   const [pollMinimized, setPollMinimized] = useState(false);
   const [pollErrorNotice, setPollErrorNotice] = useState(false);
+  // 題目＋選項放不下時整體縮小字級（1366×768 基準）；換題、揭曉、刪除選項、收票結果出現時重算
+  const playMainRef = useRef<HTMLDivElement>(null);
+  useFitText(playMainRef, [".tpi-question-card__inner"], [
+    state.question?.id,
+    state.phase,
+    state.removedOption,
+    state.pollResult,
+    pollErrorNotice,
+  ]);
 
   const pollCountdown = useCountdown({
     seconds: state.config.pollSeconds,
@@ -665,7 +675,7 @@ export default function App() {
           // 題目 + 選項放左邊主欄，倒數與提示卡放右邊窄欄；用 CSS grid 讓兩欄各自佔滿高度，
           // 不會因為倒數圓環出現／消失而把選項擠到 HostBar 底下（見 2026-09-13 第二輪試玩問題 2）。
           <div className="tpi-play">
-            <div className="tpi-play__main">
+            <div className="tpi-play__main" ref={playMainRef}>
               <QuestionCard question={state.question} level={state.level} />
               {pollErrorNotice && !isPollActive && (
                 <p className="tpi-poll__error">上一次線上投票連線異常，已自動切換為手動輸入。</p>

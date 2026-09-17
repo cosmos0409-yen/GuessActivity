@@ -30,7 +30,7 @@ export interface GameConfig {
   timeoutPolicy: "wrong" | "host";
   /** 彩排模式：不寫入已使用題目、不產生排行榜紀錄 */
   rehearsal: boolean;
-  /** 全場協助預設收票秒數，預設 20（供 UI/投票流程使用，reducer 只是保存） */
+  /** 全場協助預設收票秒數，預設 60（2026-09-17 使用者要求延長；主持人可以提早收票） */
   pollSeconds: number;
 }
 
@@ -39,7 +39,7 @@ export const DEFAULT_CONFIG: GameConfig = {
   seconds: 30,
   timeoutPolicy: "wrong",
   rehearsal: false,
-  pollSeconds: 20,
+  pollSeconds: 60,
 };
 
 // ---------------------------------------------------------------------------

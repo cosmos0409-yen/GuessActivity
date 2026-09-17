@@ -4,9 +4,17 @@
 .brand { display: flex; flex-direction: column; line-height: 1.25; }
 .brand strong { font-family: var(--font-heading); font-size: clamp(1.2rem, 2vw, 2rem); letter-spacing: 0.05em; }
 .brand span { font-size: clamp(0.7rem, 0.8vw, 0.95rem); opacity: 0.7; letter-spacing: 0.06em; }
-.topbar-right { margin-left: auto; display: flex; gap: 0.6rem; font-size: clamp(0.9rem, 1.1vw, 1.3rem); }
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 0.6rem; font-size: clamp(0.9rem, 1.1vw, 1.3rem); }
+.sound-volume { width: clamp(70px, 7vw, 130px); accent-color: var(--gold); }
+.sound-unlock { animation: pulse 1.6s ease-in-out infinite; }
 
 .stage { padding: 0 clamp(1rem, 3vw, 3rem) 2rem; max-width: 1800px; margin: 0 auto; }
+/* 出題、答案揭曉、最終排名：整頁固定一個螢幕高（以 1366×768 為基準），按鈕永遠在畫面內，不能捲動 */
+body.host.fit { height: 100vh; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+body.host.fit .topbar { flex: none; padding-block: clamp(0.4rem, 1.2vh, 1rem); }
+body.host.fit .stage { flex: 1; min-height: 0; width: 100%; padding-bottom: clamp(0.5rem, 1.6vh, 1.5rem); display: flex; flex-direction: column; }
+body.host.fit .stage > section:not([hidden]) { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.fit-measuring, .fit-measuring * { animation: none !important; }
 .title {
   font-family: var(--font-heading);
   font-size: clamp(2.4rem, 5vw, 4.5rem);
@@ -180,14 +188,35 @@
 .pd-empty { opacity: 0.7; }
 
 /* ---- 出題 ---- */
-.q-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin: 0.25rem 0 1rem; }
+.q-head { flex: none; display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin: 0.25rem 0 clamp(0.4rem, 1.2vh, 1rem); }
 .progress { list-style: none; display: flex; flex-wrap: wrap; gap: 0.55rem; padding: 0; margin: 0; }
 .progress li { width: clamp(14px, 1.2vw, 22px); aspect-ratio: 1; border-radius: 50%; background: rgba(255, 255, 255, 0.18); transition: transform 0.3s ease; }
 .progress li.done { background: var(--gold-deep); }
 .progress li.current { background: var(--gold); box-shadow: var(--glow-gold); transform: scale(1.3); }
 .q-count { font-size: clamp(1.2rem, 1.8vw, 2rem); margin: 0; }
 .q-count strong { color: var(--gold); font-size: 1.3em; font-variant-numeric: tabular-nums; }
-.q-main { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: clamp(1rem, 2vw, 2rem); align-items: center; }
+/* 出題版面：一個螢幕高（body.fit），三種排法由 host.js 依圖片長寬比切換 */
+.q-layout {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: grid;
+  gap: clamp(0.5rem, 1.4vh, 1.2rem) clamp(1rem, 2vw, 2rem);
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  grid-template-areas: "card timer" "meter meter" "tiles tiles";
+  align-items: center;
+}
+/* 橫式圖片：圖在題目下方、寬度拉滿，吃掉剩下的高度 */
+.q-layout.landscape { grid-template-rows: auto minmax(0, 1fr) auto auto; grid-template-areas: "card timer" "img img" "meter meter" "tiles tiles"; }
+/* 直式圖片：圖左字右，圖片佔滿整個高度（欄寬由 host.js 依長寬比算出 --img-col） */
+.q-layout.portrait { grid-template-columns: var(--img-col, 35%) minmax(0, 1fr) auto; grid-template-areas: "img card timer" "img meter meter" "img tiles tiles"; }
+.q-layout .q-card { grid-area: card; max-height: 100%; overflow: hidden; }
+.q-layout .timer-ring { grid-area: timer; }
+.q-layout .answer-meter { grid-area: meter; margin: 0; }
+.q-layout .tiles { grid-area: tiles; }
+/* 圖片不參與格線的內容尺寸計算（contain: size），只填滿分配到的格子並等比縮放 */
+.q-image, .r-image { grid-area: img; display: block; width: 100%; height: 100%; min-height: 0; object-fit: contain; contain: size; border-radius: var(--radius-md); }
 .q-card {
   background: var(--cream);
   color: var(--ink);
@@ -198,8 +227,8 @@
   animation: pop-in 0.35s ease both;
 }
 .q-label { margin: 0 0 0.4rem; color: var(--gold-deep); font-weight: 800; letter-spacing: 0.1em; font-size: clamp(1rem, 1.3vw, 1.4rem); }
-.q-text { font-family: var(--font-heading); font-size: clamp(1.8rem, 3.2vw, 3.6rem); line-height: 1.35; margin: 0; }
-.q-image { display: block; max-height: 32vh; max-width: 100%; border-radius: var(--radius-md); margin-top: 1rem; }
+/* --fit 由 host.js 從 1 往下調，放不下時整體縮小；max() 是投影最後一排也看得清楚的下限 */
+.q-text { font-family: var(--font-heading); font-size: max(28px, calc(var(--fit, 1) * clamp(1.8rem, 3.2vw, 3.6rem))); line-height: 1.35; margin: 0; }
 .timer-ring {
   --p: 1;
   --ring: var(--gold);
@@ -229,10 +258,10 @@
   display: flex;
   align-items: center;
   gap: 1rem;
-  padding: clamp(0.8rem, 1.4vw, 1.4rem) clamp(1rem, 1.6vw, 1.6rem);
+  padding: calc(var(--fit, 1) * clamp(0.8rem, 1.4vw, 1.4rem)) clamp(1rem, 1.6vw, 1.6rem);
   border-radius: var(--radius-md);
   color: #fff;
-  font-size: clamp(1.3rem, 2.2vw, 2.4rem);
+  font-size: max(22px, calc(var(--fit, 1) * clamp(1.3rem, 2.2vw, 2.4rem)));
   font-weight: 800;
   box-shadow: var(--shadow-card);
   animation: pop-in 0.4s ease both;
@@ -245,13 +274,34 @@
 .tile-text { position: relative; z-index: 1; flex: 1; min-width: 0; overflow-wrap: anywhere; }
 /* 3 選 1：第三個選項佔滿最後一列，版面不會缺一角 */
 .tiles:not(.result-tiles) .tile:nth-child(3):last-child { grid-column: 1 / -1; }
-.controls { display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1.2rem; }
+/* 橫式圖片且選項都很短（例如「左1」）：四個選項排成一排，把高度留給圖片 */
+.tiles.one-row { grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); }
+.tiles.one-row .tile:nth-child(3):last-child { grid-column: auto; }
+.controls { flex: none; display: flex; justify-content: flex-end; gap: 1rem; margin-top: clamp(0.4rem, 1.2vh, 1.2rem); }
 
 /* ---- 答案揭曉 ---- */
-.result-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: clamp(1rem, 2.5vw, 2.5rem); align-items: start; }
-.r-text { font-family: var(--font-heading); font-size: clamp(1.4rem, 2.4vw, 2.6rem); margin: 0 0 1rem; line-height: 1.35; }
+.result-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: clamp(1rem, 2.5vw, 2.5rem); align-items: stretch; }
+.r-layout {
+  min-height: 0;
+  overflow: hidden;
+  display: grid;
+  column-gap: clamp(1rem, 2vw, 2rem);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto auto;
+  grid-template-areas: "label" "text" "dist";
+  align-content: start;
+}
+.r-layout.landscape { grid-template-rows: auto auto minmax(0, 1fr) auto; grid-template-areas: "label" "text" "img" "dist"; align-content: stretch; }
+.r-layout.portrait { grid-template-columns: var(--img-col, 35%) minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); grid-template-areas: "img label" "img text" "img dist"; align-content: stretch; }
+.r-layout .q-label { grid-area: label; }
+.r-layout .r-text { grid-area: text; }
+.r-layout .result-tiles { grid-area: dist; align-self: start; }
+.r-layout.landscape .r-image { margin: 0 0 clamp(0.4rem, 1vh, 1rem); }
+.r-text { font-family: var(--font-heading); font-size: max(24px, calc(var(--fit, 1) * clamp(1.4rem, 2.4vw, 2.6rem))); margin: 0 0 clamp(0.4rem, 1.2vh, 1rem); line-height: 1.35; }
 .result-tiles { grid-template-columns: 1fr; }
-.result-tiles .tile { font-size: clamp(1.1rem, 1.8vw, 2rem); }
+/* 有圖片時結果改成 2×2，把高度留給圖片 */
+.r-layout.landscape .result-tiles, .r-layout.portrait .result-tiles { grid-template-columns: 1fr 1fr; }
+.result-tiles .tile { font-size: max(20px, calc(var(--fit, 1) * clamp(1.1rem, 1.8vw, 2rem))); }
 .tile.dim { filter: grayscale(0.65) brightness(0.55); }
 .tile.correct { outline: 5px solid var(--gold); outline-offset: 2px; box-shadow: var(--glow-gold); }
 .tile-fill { position: absolute; inset: 0 auto 0 0; width: 0; background: rgba(255, 255, 255, 0.2); transition: width 0.9s cubic-bezier(0.2, 0.8, 0.2, 1); }
@@ -285,7 +335,6 @@
 #r-leaderboard li { padding: 0.3rem 0.7rem; font-size: clamp(1rem, 1.35vw, 1.6rem); }
 #r-leaderboard li:nth-child(n + 4) .rank-badge { background: rgba(255, 255, 255, 0.08); }
 .board h3 { margin-bottom: 0.6rem; }
-.r-image { display: block; max-height: 22vh; max-width: 100%; border-radius: var(--radius-md); margin: 0 0 1rem; }
 .rank-badge { display: grid; place-content: center; aspect-ratio: 1; border-radius: 50%; background: rgba(255, 255, 255, 0.14); font-weight: 900; }
 .leaderboard li:first-child .rank-badge { background: var(--gold); color: var(--ink); }
 .lb-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -295,24 +344,27 @@
 /* ---- 最終排名 ---- */
 /* 頒獎台從下方升起時會暫時超出畫面，裁掉以免閃出捲軸 */
 .final { text-align: center; overflow: hidden; }
+body.host.fit #final .title { flex: none; font-size: calc(var(--fit, 1) * clamp(2.4rem, 5vw, 4.5rem)); }
 .podium {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: end;
   gap: clamp(0.6rem, 2vw, 2rem);
+  width: 100%;
   max-width: 1100px;
-  margin: 1.5rem auto 0;
-  min-height: 50vh;
+  margin: clamp(0.5rem, 1.5vh, 1.5rem) auto 0;
+  flex: 1;
+  min-height: 0;
 }
 .podium-col { display: flex; flex-direction: column; align-items: center; gap: 0.4rem; animation: rise 0.8s cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }
 /* 依第 3 → 2 → 1 名的順序升起，製造懸念 */
 .podium-col.place-3 { animation-delay: 0.3s; }
 .podium-col.place-2 { animation-delay: 1.3s; }
 .podium-col.place-1 { animation-delay: 2.3s; }
-.crown { font-size: clamp(2rem, 3.2vw, 3.6rem); line-height: 1; }
-.podium-name { font-size: clamp(1.3rem, 2.6vw, 3rem); font-weight: 900; max-width: 100%; overflow-wrap: anywhere; }
+.crown { font-size: calc(var(--fit, 1) * clamp(2rem, 3.2vw, 3.6rem)); line-height: 1; }
+.podium-name { font-size: max(22px, calc(var(--fit, 1) * clamp(1.3rem, 2.6vw, 3rem))); font-weight: 900; max-width: 100%; overflow-wrap: anywhere; }
 .place-1 .podium-name { color: var(--gold); }
-.podium-score { font-size: clamp(1rem, 1.6vw, 1.8rem); opacity: 0.9; }
+.podium-score { font-size: max(16px, calc(var(--fit, 1) * clamp(1rem, 1.6vw, 1.8rem))); opacity: 0.9; }
 .podium-code { font-size: clamp(0.85rem, 1.1vw, 1.25rem); background: rgba(0, 0, 0, 0.3); padding: 0.2rem 0.8rem; border-radius: 999px; }
 .podium-block {
   width: 100%;
@@ -325,19 +377,20 @@
   color: var(--ink);
   box-shadow: var(--shadow-card);
 }
-.place-1 .podium-block { height: 30vh; background: linear-gradient(180deg, #f3de9c, var(--gold)); }
-.place-2 .podium-block { height: 21vh; background: linear-gradient(180deg, #eef0f5, #aeb5c4); }
-.place-3 .podium-block { height: 15vh; background: linear-gradient(180deg, #f0c9a0, #b87b45); }
+.place-1 .podium-block { height: calc(var(--fit, 1) * 30vh); background: linear-gradient(180deg, #f3de9c, var(--gold)); }
+.place-2 .podium-block { height: calc(var(--fit, 1) * 21vh); background: linear-gradient(180deg, #eef0f5, #aeb5c4); }
+.place-3 .podium-block { height: calc(var(--fit, 1) * 15vh); background: linear-gradient(180deg, #f0c9a0, #b87b45); }
 .final-list {
+  flex: none;
   list-style: none;
   padding: 0;
-  margin: 1.5rem auto 0;
+  margin: clamp(0.5rem, 1.5vh, 1.5rem) auto 0;
   max-width: 1100px;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
   gap: 0.5rem 1.5rem;
   text-align: left;
-  font-size: clamp(1rem, 1.4vw, 1.6rem);
+  font-size: max(15px, calc(var(--fit, 1) * clamp(1rem, 1.4vw, 1.6rem)));
 }
 .final-list li { padding: 0.4rem 0.8rem; border-radius: var(--radius-sm); background: rgba(255, 255, 255, 0.07); }
 .confetti { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 10; }

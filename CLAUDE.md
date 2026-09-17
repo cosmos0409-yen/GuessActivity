@@ -20,7 +20,7 @@ node tools/flow-test.mjs [網址]          # 完整流程測試（不帶網址�
 node tools/loadtest.mjs [網址] [人數]    # 壓力測試，預設 150 人；活動當天不要對正式網址跑
 ```
 
-**全場搶答的部署由使用者自己在 PowerShell 執行**（`npx wrangler deploy`）：Claude 執行部署會被權限規則擋下。
+**全場搶答的部署由使用者自己在 PowerShell 執行**：在 `live-quiz/` 執行 `powershell -ExecutionPolicy Bypass -File tools\deploy.ps1`（專案路徑含中文，直接 `npx wrangler deploy` 會當掉，見下方環境注意事項）。Claude 執行部署會被權限規則擋下。
 
 **禁止執行 `npm run build`**：在目前環境的 Node 24 下，`vite build` 階段會卡死在
 「39 modules transformed」（疑似 `@rollup/rollup-win32-x64-msvc` native binding 相容性問題，
@@ -56,10 +56,13 @@ node tools/loadtest.mjs [網址] [人數]    # 壓力測試，預設 150 人；�
 - 對象是**考過國家考試的學員**，題目與選項不能出得幼稚或太簡單。
 - 美術／配色一律使用司法官學院院徽色系（見 `src/styles/tokens.css`），不要自行換成別的主題色。
 - 全場搶答：**正解與題目本文只能傳給主持人**，玩家端的 WebSocket 訊息只能帶選項文字；題庫一律經過 `live-quiz/src/question-bank.js` 驗證。
+- **投影畫面以 1366×768 為基準**（決賽全部畫面、選拔賽主持人頁）：每個階段的每一題都要完整顯示、不能捲動、按鈕在畫面內。放不下時自動縮字（決賽 `src/app/fitText.ts` 的 `--tpi-fit`、選拔賽 `live-quiz/public/host.js` 的 `--fit`），**字級下限：題目 28px、選項 22px**。選拔賽圖片題：直式（寬÷高 < 1.1）圖左字右、橫式圖在題目下方。改版面後要在 1366×768 實測。
+- 選拔賽音效與決賽共用 `src/audio/SoundManager.ts`：`live-quiz/public/shared/sound.js` 是 `live-quiz/tools/build-sound.mjs` 產生的，**不要手改**，改完 SoundManager.ts 要重新產生。
 
 ## 環境注意事項
 
 - 專案路徑含中文（`C:\猜謎程式`），**Glob 工具在中文路徑下會失效**，改用 `ls`（Bash）或 Grep 工具做檔案搜尋。
+- **wrangler（4.131.1＋Node 24）在含中文的工作目錄會以 0xC0000409 當掉**、不顯示錯誤（像卡住）：部署用 `live-quiz/tools/deploy.ps1`；本機 `wrangler dev` 要把 `src`、`public`、`wrangler.jsonc`、`package.json` 複製到英文路徑再從那裡執行。
 - 派 subagent 執行任務時，**禁止該 subagent 再二度轉包給別的 subagent**。
 
 ## 詳細內容

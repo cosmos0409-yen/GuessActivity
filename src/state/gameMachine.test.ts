@@ -71,7 +71,7 @@ describe("initialState", () => {
       seconds: 30,
       timeoutPolicy: "wrong",
       rehearsal: false,
-      pollSeconds: 20,
+      pollSeconds: 60,
     });
     expect(s.lifelines).toEqual({ fiftyRemove: true, phoneFriend: true, audiencePoll: true });
     expect(s.history).toEqual([]);

@@ -4,12 +4,18 @@ import { CHOICE_STYLES } from "/shared/choices.js";
 // QR code 在瀏覽器裡直接產生，不呼叫任何外部 API（qrcode-generator，MIT 授權，檔案放在 public/shared/）
 import qrcode from "/shared/qrcode.mjs";
 import { parseQuestionCsv } from "/shared/question-csv.js";
+// 合成音效：與決賽共用 src/audio/SoundManager.ts（由 tools/build-sound.mjs 產生），只在投影幕這台電腦播放
+import soundManager from "/shared/sound.js";
 
 const HOST_KEY = "liveQuiz.host";
 // 題庫設定：選哪一種、試算表網址；另外存一份最後一次讀成功的 CSV，現場讀不到試算表時拿來用
 const BANK_KEY = "liveQuiz.bank";
 const BANK_CACHE_KEY = "liveQuiz.bankCache";
 const SHEET_TIMEOUT_MS = 8000;
+// 正式題庫（試算表「搶答題」分頁發布的 CSV）的預設網址：這台電腦沒有存過網址時自動填入，換電腦不用再貼。
+// ⚠️ 使用者 2026-09-17 明知風險後決定寫在這裡：host.js 是公開檔案，有心人可以從這個網址看到正解。
+const DEFAULT_SHEET_URL =
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDMOTLgvahrEnSwzReVTj9CEbwKDgXjrAZ3Tu7h8mFLWTJlQr4gwfTOJjwLfSgFjbEhEeUxunp3viH/pub?gid=1063568289&single=true&output=csv";
 // 決賽（闖關猜謎）的網址：「前往決賽」會帶上前 3 名的暱稱（?c=第1名&c=第2名&c=第3名），
 // 決賽大廳會把這 3 個名字顯示成按鈕，點一下就帶入挑戰者姓名。
 const FINALS_URL = "https://cosmos0409-yen.github.io/GuessActivity/";
@@ -40,7 +46,133 @@ function show(section) {
   const inRoom = section !== "setup";
   $("manage").hidden = !inRoom || section === "final";
   $("takeover").hidden = !inRoom;
+  document.body.classList.toggle("fit", FIT_SECTIONS.includes(section));
+  scheduleFit();
+  currentSection = section;
+  applySceneSound(section);
 }
+
+// ---------- 音效 ----------
+// 等待室：輕柔背景音；出題：出題音＋倒數節拍（最後 5 秒加快）；時間到：時間到音效；
+// 答案揭曉：揭曉音；最終排名：慶祝音。瀏覽器規定要先點一下畫面才能出聲。
+let currentSection = "setup";
+let soundUnlocked = false;
+let soundScene = ""; // 同一題只播一次出題音／揭曉音（重新連線、名單更新時不重播）
+let soundQuestionIndex = -1;
+let timerUrgent = false;
+let timeUpPlayed = false;
+
+function applySceneSound(section) {
+  const key = section === "question" || section === "result" ? `${section}:${soundQuestionIndex}` : section;
+  if (key === soundScene) return;
+  soundScene = key;
+  soundManager.setBedUrgent(false);
+  if (section === "lobby") {
+    soundManager.startBed("lobby");
+  } else if (section === "question") {
+    soundManager.stopBed();
+    soundManager.play("questionShow");
+    soundManager.startBed("countdown");
+  } else if (section === "result") {
+    soundManager.stopBed();
+    soundManager.play("correct");
+  } else if (section === "final") {
+    soundManager.stopBed();
+    soundManager.play("champion");
+  } else {
+    soundManager.stopBed();
+  }
+}
+
+function unlockSound() {
+  if (soundUnlocked) return;
+  soundManager.unlock();
+  soundUnlocked = true;
+  $("sound-unlock").hidden = true;
+  soundScene = ""; // 解鎖前的場景沒有出聲，解鎖後補上目前畫面的聲音
+  applySceneSound(currentSection);
+}
+
+function renderSoundControls() {
+  const muted = soundManager.isMuted();
+  $("sound-toggle").textContent = muted ? "🔇" : "🔊";
+  $("sound-toggle").setAttribute("aria-pressed", String(muted));
+  $("sound-toggle").title = muted ? "目前靜音，點一下開啟音效" : "點一下靜音";
+  $("sound-volume").value = String(soundManager.getVolume());
+}
+
+document.addEventListener("pointerdown", unlockSound, true);
+document.addEventListener("keydown", unlockSound, true);
+
+// ---------- 版面：一個螢幕高、依圖片方向排版、放不下就縮小字級 ----------
+// 以 1366×768 為基準：出題、答案揭曉、最終排名都不能捲動，按鈕永遠在畫面內。
+const FIT_SECTIONS = ["question", "result", "final"];
+const FIT_MIN = 0.5; // 字級最多縮到 50%；CSS 另有 max(28px…) 等下限，確保最後一排看得清楚
+const PORTRAIT_MAX_RATIO = 1.1; // 寬÷高小於這個值算直式（含接近正方形），圖左字右
+const SHORT_CHOICE = 8; // 橫式圖片時，選項都不超過這個字數就排成一排
+let fitPending = false;
+
+// 依圖片長寬比切換版面：直式 → 圖左字右；橫式 → 圖在題目下方、寬度拉滿
+function applyImageLayout(layout, img, hasImage, choices, tiles, allowOneRow = true) {
+  layout.classList.remove("portrait", "landscape");
+  tiles.classList.remove("one-row");
+  if (!hasImage) return;
+  const decide = () => {
+    const ratio = img.naturalWidth && img.naturalHeight ? img.naturalWidth / img.naturalHeight : 1.5;
+    const portrait = ratio < PORTRAIT_MAX_RATIO;
+    layout.classList.toggle("portrait", portrait);
+    layout.classList.toggle("landscape", !portrait);
+    layout.dataset.ratio = String(ratio);
+    tiles.classList.toggle("one-row", allowOneRow && !portrait && choices.every((c) => c.length <= SHORT_CHOICE));
+    scheduleFit();
+  };
+  if (img.complete && img.naturalWidth) decide();
+  else {
+    layout.classList.add("landscape"); // 圖片還沒載入完（理論上已預先載入）先用橫式，載入後再決定
+    img.addEventListener("load", decide, { once: true });
+  }
+}
+
+// 等這一輪 DOM 更新完就量（microtask 會強制排版，不依賴重繪；分頁在背景時 requestAnimationFrame 不會跑）
+function scheduleFit() {
+  if (fitPending) return;
+  fitPending = true;
+  queueMicrotask(() => {
+    fitPending = false;
+    fitVisibleSection();
+  });
+}
+
+function fitVisibleSection() {
+  const sec = FIT_SECTIONS.map((id) => $(id)).find((s) => !s.hidden);
+  if (!sec) return;
+  // 直式圖片的欄寬：依版面高度與長寬比算，最多佔 42% 寬
+  for (const layout of sec.querySelectorAll(".portrait")) {
+    const ratio = Number(layout.dataset.ratio) || 0.75;
+    layout.style.setProperty("--img-col", `${Math.round(Math.min(layout.clientHeight * ratio, layout.clientWidth * 0.42))}px`);
+  }
+  // 量的時候先停掉進場動畫：頒獎台「升起」一開始會往下位移，會被誤判成超出畫面；移除後動畫從頭正常播放
+  sec.classList.add("fit-measuring");
+  for (let fit = 1; ; fit -= 0.04) {
+    sec.style.setProperty("--fit", fit.toFixed(2));
+    if (fits(sec) || fit <= FIT_MIN) break;
+  }
+  sec.classList.remove("fit-measuring");
+}
+
+// 放得下＝區塊本身與標了 data-fit 的格子都沒有被裁切，而且橫式圖片至少保有版面一半的高度（先縮字，把高度讓給照片）
+function fits(sec) {
+  const boxes = [sec, ...sec.querySelectorAll("[data-fit]")].filter((b) => b.offsetParent);
+  if (boxes.some((b) => b.scrollHeight > b.clientHeight + 1 || b.scrollWidth > b.clientWidth + 1)) return false;
+  for (const layout of sec.querySelectorAll(".landscape")) {
+    const img = layout.querySelector("img");
+    const want = Math.min(img.naturalHeight || Infinity, layout.clientHeight * 0.5);
+    if (img.clientHeight + 1 < want) return false;
+  }
+  return true;
+}
+
+window.addEventListener("resize", scheduleFit);
 
 // 短暫提示（例如「已移出 OOO」），3 秒後自動消失
 function flash(text) {
@@ -341,12 +473,24 @@ function renderProgress(index) {
 
 function startTimer(startedAt, timeLimit) {
   cancelAnimationFrame(timerFrame);
+  timerUrgent = false;
+  timeUpPlayed = remainingMs(startedAt, timeLimit) <= 0; // 重新連線時已經時間到：不要再播一次
   const ring = $("timer");
   const tick = () => {
     const left = remainingMs(startedAt, timeLimit);
     $("q-seconds").textContent = Math.ceil(left / 1000);
     ring.style.setProperty("--p", String(left / (timeLimit * 1000)));
-    ring.classList.toggle("urgent", left > 0 && left <= URGENT_MS);
+    const urgent = left > 0 && left <= URGENT_MS;
+    ring.classList.toggle("urgent", urgent);
+    if (urgent !== timerUrgent) {
+      timerUrgent = urgent;
+      soundManager.setBedUrgent(urgent);
+    }
+    if (left <= 0 && !timeUpPlayed && currentSection === "question") {
+      timeUpPlayed = true;
+      soundManager.stopBed();
+      soundManager.play("timeUp");
+    }
     if (left > 0) timerFrame = requestAnimationFrame(tick);
   };
   tick();
@@ -362,6 +506,7 @@ function renderQuestion(q) {
   syncClock(q.serverNow);
   totalQuestions = q.totalQuestions;
   const question = questions[q.questionIndex];
+  soundQuestionIndex = q.questionIndex;
   $("q-number").textContent = `${q.questionIndex + 1}／${q.totalQuestions}`;
   $("q-text").textContent = question.text;
   $("q-image").hidden = !question.image;
@@ -369,6 +514,7 @@ function renderQuestion(q) {
   renderAnswerCount(0, Number($("q-online").textContent) || 0);
   renderProgress(q.questionIndex);
   $("q-choices").replaceChildren(...question.choices.map((text, i) => tile(i, text)));
+  applyImageLayout($("q-layout"), $("q-image"), Boolean(question.image), question.choices, $("q-choices"));
   show("question");
   startTimer(q.startedAt, q.timeLimit);
 }
@@ -377,6 +523,7 @@ function renderQuestion(q) {
 function renderResult(r) {
   cancelAnimationFrame(timerFrame);
   const question = questions[r.questionIndex];
+  soundQuestionIndex = r.questionIndex;
   $("r-number").textContent = r.questionIndex + 1;
   $("r-text").textContent = question.text;
   // 圖片題：答案揭曉時也顯示圖片（已經在建立房間時預先載入，直接從快取顯示）
@@ -405,6 +552,8 @@ function renderResult(r) {
   renderLeaderboard(r.leaderboard, { showMoves: !r.restored && r.questionIndex > 0, animate: !r.restored });
 
   $("next").textContent = r.isLast ? "看最終排名" : "下一題";
+  // 答案揭曉的結果色塊有人數與「正確答案」標籤，不排成一排
+  applyImageLayout($("r-layout"), $("r-image"), Boolean(question.image), question.choices, $("r-dist"), false);
   show("result");
 }
 
@@ -476,6 +625,8 @@ function launchConfetti() {
 // ---------- 連線 ----------
 function enterRoom({ roomCode, hostToken }) {
   currentRoom = { roomCode, hostToken };
+  // 按「建立房間」時已經點過畫面、聲音已解鎖；重新整理後自動回到房間則還沒點過，顯示提示
+  $("sound-unlock").hidden = soundUnlocked;
   $("room-code").textContent = roomCode;
   $("top-room").textContent = `房間 ${roomCode}`;
   $("top-room").hidden = false;
@@ -628,12 +779,22 @@ $("new-room").addEventListener("click", () => {
 
 for (const radio of document.querySelectorAll('input[name="bank"]')) radio.addEventListener("change", updateBankUi);
 $("load-sheet").addEventListener("click", loadSheet);
+$("sound-toggle").addEventListener("click", () => {
+  soundManager.setMuted(!soundManager.isMuted());
+  renderSoundControls();
+});
+$("sound-volume").addEventListener("input", (e) => {
+  soundManager.setVolume(Number(e.target.value));
+  if (soundManager.isMuted() && Number(e.target.value) > 0) soundManager.setMuted(false);
+  renderSoundControls();
+});
+renderSoundControls();
 $("sheet-url").addEventListener("change", () => {
   sheetQuestions = null;
   saveBankSettings();
 });
 const bankSettings = readJson(BANK_KEY);
-if (bankSettings?.url) $("sheet-url").value = bankSettings.url;
+$("sheet-url").value = bankSettings?.url || DEFAULT_SHEET_URL;
 if (bankSettings?.mode === "sheet") document.querySelector('input[name="bank"][value="sheet"]').checked = true;
 $("sheet-box").hidden = bankMode() !== "sheet";
 

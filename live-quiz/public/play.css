@@ -4,6 +4,13 @@
 .p-top strong { font-family: var(--font-heading); letter-spacing: 0.05em; }
 .p-top .chip { margin-left: auto; max-width: 45vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .p-main { padding: 1rem; max-width: 34rem; margin: 0 auto; }
+/* 玩家頁：頁首＋內容剛好一個螢幕高，不再用「100dvh − 估計的頁首高度」（估計值會多出一點點可以捲動） */
+body.player:has(#question) { height: 100dvh; min-height: 0; display: flex; flex-direction: column; }
+body.player:has(#question) .p-top { flex: none; }
+body.player:has(#question) .p-main { flex: 1; min-height: 0; width: 100%; overflow-y: auto; }
+body.player:has(#question) .p-center { min-height: 100%; }
+body.player:has(#question) .p-question { height: 100%; }
+body.player:has(#question) .p-result { min-height: 100%; }
 .p-card {
   background: var(--cream);
   color: var(--ink);
